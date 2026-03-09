@@ -4,13 +4,20 @@ import { supabase } from "./supabaseClient";
 // ─── SAMPLE GAMES ────────────────────────────────────────────────────────────
 // Replace this array daily with real lines, or wire up an API later.
 const SAMPLE_GAMES = [
-  { id: "g1", away: "Kansas",      home: "Baylor",       time: "7:00 PM",  spread: { away: "+3.5", home: "-3.5" }, total: "152.5", ml: { away: "+140", home: "-165" } },
-  { id: "g2", away: "Duke",        home: "UNC",          time: "9:00 PM",  spread: { away: "+1.5", home: "-1.5" }, total: "158.0", ml: { away: "+115", home: "-135" } },
-  { id: "g3", away: "Purdue",      home: "Indiana",      time: "6:30 PM",  spread: { away: "-4.5", home: "+4.5" }, total: "144.5", ml: { away: "-200", home: "+168" } },
-  { id: "g4", away: "Michigan St", home: "Michigan",     time: "8:00 PM",  spread: { away: "+2",   home: "-2"   }, total: "149.0", ml: { away: "+108", home: "-128" } },
-  { id: "g5", away: "Arizona",     home: "UCLA",         time: "10:00 PM", spread: { away: "-6",   home: "+6"   }, total: "161.5", ml: { away: "-230", home: "+190" } },
-  { id: "g6", away: "Gonzaga",     home: "Saint Mary's", time: "11:00 PM", spread: { away: "-7.5", home: "+7.5" }, total: "155.0", ml: { away: "-310", home: "+252" } },
-  { id: "g7", away: "Villanova",   home: "Georgetown",   time: "6:00 PM",  spread: { away: "-5",   home: "+5"   }, total: "147.0", ml: { away: "-205", home: "+172" } },
+  { id: "g1",  away: "Alcorn State",  home: "Alabama St",         time: "11:00 AM", spread: { away: "+6.5",  home: "-6.5"  }, total: "143.5", ml: { away: "+220",  home: "-270"  } },
+  { id: "g2",  away: "Campbell",      home: "Monmouth",           time: "11:00 AM", spread: { away: "+2.5",  home: "-2.5"  }, total: "N/A",   ml: { away: "+118",  home: "-138"  } },
+  { id: "g3",  away: "New Orleans",   home: "Texas A&M-CC",       time: "3:00 PM",  spread: { away: "+2.5",  home: "-2.5"  }, total: "N/A",   ml: { away: "+115",  home: "-135"  } },
+  { id: "g4",  away: "N Kentucky",    home: "Wright State",       time: "3:00 PM",  spread: { away: "+1.5",  home: "-1.5"  }, total: "N/A",   ml: { away: "+108",  home: "-128"  } },
+  { id: "g5",  away: "Furman",        home: "E Tennessee St",     time: "4:00 PM",  spread: { away: "+1.5",  home: "-1.5"  }, total: "N/A",   ml: { away: "+108",  home: "-128"  } },
+  { id: "g6",  away: "GA Southern",   home: "Troy",               time: "4:00 PM",  spread: { away: "+6.5",  home: "-6.5"  }, total: "N/A",   ml: { away: "+220",  home: "-270"  } },
+  { id: "g7",  away: "N. Colorado",   home: "Montana",            time: "4:00 PM",  spread: { away: "-3.5",  home: "+3.5"  }, total: "151.5", ml: { away: "-175",  home: "+148"  } },
+  { id: "g8",  away: "MS Valley St",  home: "Grambling St",       time: "4:30 PM",  spread: { away: "+12.5", home: "-12.5" }, total: "N/A",   ml: { away: "+450",  home: "-600"  } },
+  { id: "g9",  away: "Towson",        home: "Hofstra",            time: "5:30 PM",  spread: { away: "+3.5",  home: "-3.5"  }, total: "N/A",   ml: { away: "+148",  home: "-175"  } },
+  { id: "g10", away: "Nicholls St",   home: "UT Rio Grande Valley", time: "5:30 PM", spread: { away: "+7.5", home: "-7.5"  }, total: "N/A",   ml: { away: "+240",  home: "-295"  } },
+  { id: "g11", away: "Oregon St",     home: "Gonzaga",            time: "5:30 PM",  spread: { away: "+19",   home: "-19"   }, total: "N/A",   ml: { away: "+900",  home: "-1400" } },
+  { id: "g12", away: "Detroit",       home: "Robert Morris",      time: "6:00 PM",  spread: { away: "+5",    home: "-5"    }, total: "N/A",   ml: { away: "+175",  home: "-215"  } },
+  { id: "g13", away: "Weber State",   home: "E. Washington",      time: "6:30 PM",  spread: { away: "+2.5",  home: "-2.5"  }, total: "N/A",   ml: { away: "+118",  home: "-138"  } },
+  { id: "g14", away: "Santa Clara",   home: "Saint Mary's",       time: "7:00 PM",  spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A",   ml: { away: "+160",  home: "-195"  } },
 ];
 
 const BET_TYPES = {
