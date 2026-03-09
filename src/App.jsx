@@ -200,6 +200,14 @@ export default function App() {
     }
   }
 
+  async function deletePicker(personName) {
+    if (!isAdmin) return;
+    await supabase.from("picks").delete().eq("name", personName);
+    const next = { ...allPicks };
+    delete next[personName];
+    setAllPicks(next);
+  }
+
   function getLabel(key) {
     const [gid, bt] = key.split("__");
     const g = games.find(x => x.id === gid);
@@ -485,6 +493,22 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {isAdmin && submitters.length > 0 && (
+              <div className="glass-card" style={{ borderRadius: 16, padding: "16px 20px", marginBottom: 16, border: "1px solid rgba(245,158,11,0.2)" }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(245,158,11,0.7)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>⚡ Manage Pickers</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {submitters.map(s => (
+                    <div key={s} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ background: "rgba(30,144,255,0.18)", border: "1px solid rgba(30,144,255,0.35)", borderRadius: 20, padding: "4px 13px", fontSize: 12, color: "#bae6fd", fontWeight: 500 }}>{s}</span>
+                      <button onClick={() => deletePicker(s)} style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(248,113,113,0.3)", background: "rgba(248,113,113,0.1)", color: "#fca5a5", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                        🗑 Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {groupPlays.length === 0 ? (
               <div className="glass-card" style={{ borderRadius: 16, padding: "60px 20px", textAlign: "center" }}>
