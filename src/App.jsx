@@ -104,6 +104,10 @@ export default function App() {
   const [authPass2, setAuthPass2]       = useState("");
   const [authError, setAuthError]       = useState("");
   const [authWorking, setAuthWorking]   = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("lockin_accounts") || "[]"); } catch { return []; }
+  });
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
 
   // App
   const [page, setPage]                     = useState("picks");
@@ -170,6 +174,13 @@ export default function App() {
       await supabase.from("profiles").upsert({ id: data.user.id, username: authUser.trim() });
     }
     setUsername(authUser.trim());
+    // Save credentials locally for quick switch
+    const updated = [
+      { username: authUser.trim(), password: authPass },
+      ...savedAccounts.filter(a => a.username !== authUser.trim())
+    ].slice(0, 6);
+    setSavedAccounts(updated);
+    localStorage.setItem("lockin_accounts", JSON.stringify(updated));
     setAuthWorking(false);
   }
 
@@ -183,6 +194,13 @@ export default function App() {
     const { error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: authPass });
     if (error) { setAuthError("Wrong password."); setAuthWorking(false); return; }
     setUsername(profile.username);
+    // Save credentials locally for quick switch
+    const updated = [
+      { username: authUser.trim(), password: authPass },
+      ...savedAccounts.filter(a => a.username !== authUser.trim())
+    ].slice(0, 6);
+    setSavedAccounts(updated);
+    localStorage.setItem("lockin_accounts", JSON.stringify(updated));
     setAuthWorking(false);
   }
 
@@ -190,6 +208,22 @@ export default function App() {
     await supabase.auth.signOut();
     setSession(null); setUsername(""); setMyPicks(null);
     setSelectedPicks({}); setPage("picks"); setIsAdmin(false);
+  }
+
+  async function switchAccount(acct) {
+    setShowAccountMenu(false);
+    await supabase.auth.signOut();
+    setMyPicks(null); setSelectedPicks({}); setPage("picks"); setIsAdmin(false);
+    setAuthWorking(true);
+    const fakeEmail = `${acct.username.toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
+    const { error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: acct.password });
+    if (error) {
+      // Remove bad saved account
+      const updated = savedAccounts.filter(a => a.username !== acct.username);
+      setSavedAccounts(updated);
+      localStorage.setItem("lockin_accounts", JSON.stringify(updated));
+    }
+    setAuthWorking(false);
   }
 
   // ── Load data ────────────────────────────────────────────────────────────
@@ -595,10 +629,35 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {/* User badge + logout */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#bae6fd", background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 20, padding: "4px 12px" }}>{username}</span>
-              <button onClick={handleLogout} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "4px 9px", cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>Out</button>
+            {/* Account switcher */}
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 20, padding: "5px 12px 5px 14px", cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#bae6fd" }}>{username}</span>
+                <span style={{ fontSize: 9, color: "rgba(186,230,253,0.5)", marginTop: 1 }}>▾</span>
+              </button>
+              {showAccountMenu && (
+                <div className="glass-card pop" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", borderRadius: 14, minWidth: 180, padding: "8px", zIndex: 300, border: "1px solid rgba(30,144,255,0.25)" }} onClick={e => e.stopPropagation()}>
+                  {savedAccounts.filter(a => a.username !== username).length > 0 && (
+                    <>
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 8px 6px" }}>Switch to</div>
+                      {savedAccounts.filter(a => a.username !== username).map(acct => (
+                        <button key={acct.username} onClick={() => switchAccount(acct)} style={{ width: "100%", display: "block", padding: "9px 12px", background: "rgba(255,255,255,0.04)", border: "none", borderRadius: 9, color: "#e0f2fe", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "Outfit, sans-serif", textAlign: "left", marginBottom: 3, transition: "background 0.15s" }}
+                          onMouseEnter={e => e.target.style.background="rgba(30,144,255,0.2)"}
+                          onMouseLeave={e => e.target.style.background="rgba(255,255,255,0.04)"}>
+                          {acct.username}
+                        </button>
+                      ))}
+                      <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "6px 0" }} />
+                    </>
+                  )}
+                  <button onClick={() => { setShowAccountMenu(false); handleLogout(); }} style={{ width: "100%", display: "block", padding: "9px 12px", background: "none", border: "none", borderRadius: 9, color: "rgba(252,165,165,0.8)", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "Outfit, sans-serif", textAlign: "left", transition: "background 0.15s" }}
+                    onMouseEnter={e => e.target.style.background="rgba(248,113,113,0.1)"}
+                    onMouseLeave={e => e.target.style.background="none"}>
+                    Log out
+                  </button>
+                </div>
+              )}
+              {showAccountMenu && <div style={{ position: "fixed", inset: 0, zIndex: 299 }} onClick={() => setShowAccountMenu(false)} />}
             </div>
           </div>
         </div>
