@@ -188,9 +188,10 @@ export default function App() {
     if (!authUser.trim() || !authPass.trim()) return setAuthError("Fill in all fields.");
     setAuthWorking(true); setAuthError("");
     // Construct fake email directly — no DB lookup needed
-    // Username is case-preserved from signup, so normalize to lowercase for email
     const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
+    console.log("[LockIn] attempting login with email:", fakeEmail);
     const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: authPass });
+    console.log("[LockIn] login result:", error ? error.message : "success", signInData?.user?.id);
     if (error) { setAuthError("Username or password is incorrect."); setAuthWorking(false); return; }
     // Get display username from metadata (set at signup)
     const displayUsername = signInData.user?.user_metadata?.username || authUser.trim();
@@ -908,3 +909,4 @@ export default function App() {
     </div>
   );
 }
+
