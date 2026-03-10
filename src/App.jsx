@@ -52,6 +52,77 @@ const TODAY_DATE = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
 const ADMIN_PASSWORD = "football4";
 
+
+// ─── PLAYER PICKS MODAL ───────────────────────────────────────────────────────
+function PlayerModal({ player, allPicks, games, onClose }) {
+  const picks = allPicks[player];
+  if (!picks) return null;
+  const isPrivate = !picks.is_public;
+  const keys = Object.keys(picks.selections || {});
+
+  function getLabel(key) {
+    const [gid, bt] = key.split("__");
+    const g = games.find(x => x.id === gid);
+    if (!g) return key;
+    const BET_TYPES_LOCAL = {
+      spread_away: (g) => ({ label: g.away, line: g.spread.away }),
+      spread_home: (g) => ({ label: g.home, line: g.spread.home }),
+      over:        (g) => ({ label: "Over",  line: g.total }),
+      under:       (g) => ({ label: "Under", line: g.total }),
+      ml_away:     (g) => ({ label: g.away,  line: `ML ${g.ml.away}` }),
+      ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}` }),
+    };
+    const { label, line } = BET_TYPES_LOCAL[bt](g);
+    return { label, line, game: g };
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="glass-card pop" onClick={e => e.stopPropagation()} style={{ borderRadius: 20, padding: "28px 24px", width: "100%", maxWidth: 400, maxHeight: "80vh", overflowY: "auto", border: "1px solid rgba(30,144,255,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", letterSpacing: -0.3 }}>{player}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>
+              {keys.length} pick{keys.length !== 1 ? "s" : ""} · {isPrivate ? "🔒 Private" : "🌐 Public"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.4)", fontSize: 18, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+
+        {keys.length === 0 ? (
+          <div style={{ textAlign: "center", color: "rgba(255,255,255,0.25)", fontSize: 13, padding: "20px 0" }}>No picks submitted</div>
+        ) : isPrivate ? (
+          <div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginBottom: 14, fontStyle: "italic" }}>This player's picks are private — you can see which games they bet but not which side.</div>
+            {keys.map(key => {
+              const [gid] = key.split("__");
+              const g = games.find(x => x.id === gid);
+              return g ? (
+                <div key={key} style={{ padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>{g.away} @ {g.home}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 2 }}>{g.time} ET · Pick hidden</div>
+                </div>
+              ) : null;
+            })}
+          </div>
+        ) : (
+          keys.map(key => {
+            const info = getLabel(key);
+            return (
+              <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{info.label} {info.line}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{info.game?.away} @ {info.game?.home}</div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
@@ -111,6 +182,7 @@ export default function App() {
 
   // App
   const [page, setPage]                     = useState("picks");
+  const [viewingPlayer, setViewingPlayer]   = useState(null); // username string or null
   const [games]                             = useState(SAMPLE_GAMES);
   const [allPicks, setAllPicks]             = useState({});   // { username: { selections, is_public } }
   const [myPicks, setMyPicks]               = useState(null); // null = not submitted today
@@ -474,7 +546,7 @@ export default function App() {
   const hasSubmitted = myPicks !== null;
 
   // ── Play card renderer ───────────────────────────────────────────────────
-  function PlayCard({ key: _key, playKey, people, dissenters, index, dimmed }) {
+  function PlayCard({ key: _key, playKey, people, dissenters, index, dimmed, onPlayerClick }) {
     const [gid, bt] = playKey.split("__");
     const game = games.find(g => g.id === gid);
     const label = getLabel(playKey);
@@ -504,7 +576,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
             {people.map(p => (
-              <span key={p} style={{ background: dimmed ? "rgba(255,255,255,0.07)" : "rgba(30,144,255,0.18)", border: `1px solid ${dimmed ? "rgba(255,255,255,0.12)" : "rgba(30,144,255,0.35)"}`, borderRadius: 20, padding: "4px 13px", fontSize: 11, color: dimmed ? "rgba(255,255,255,0.4)" : "#bae6fd", fontWeight: 500 }}>{p}</span>
+              <span key={p} onClick={() => onPlayerClick && onPlayerClick(p)} style={{ background: dimmed ? "rgba(255,255,255,0.07)" : "rgba(30,144,255,0.18)", border: `1px solid ${dimmed ? "rgba(255,255,255,0.12)" : "rgba(30,144,255,0.35)"}`, borderRadius: 20, padding: "4px 13px", fontSize: 11, color: dimmed ? "rgba(255,255,255,0.4)" : "#bae6fd", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}>{p}</span>
             ))}
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -532,7 +604,7 @@ export default function App() {
             </span>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {dissenters.map(p => (
-                <span key={p} style={{ background: `rgba(251,113,133,${dimmed?0.08:0.15})`, border: `1px solid rgba(251,113,133,${dimmed?0.2:0.35})`, borderRadius: 20, padding: "3px 11px", fontSize: 11, color: dimmed?"rgba(253,164,175,0.5)":"#fda4af", fontWeight: 500 }}>{p}</span>
+                <span key={p} onClick={() => onPlayerClick && onPlayerClick(p)} style={{ background: `rgba(251,113,133,${dimmed?0.08:0.15})`, border: `1px solid rgba(251,113,133,${dimmed?0.2:0.35})`, borderRadius: 20, padding: "3px 11px", fontSize: 11, color: dimmed?"rgba(253,164,175,0.5)":"#fda4af", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}>{p}</span>
               ))}
             </div>
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginLeft: "auto" }}>on {oppLabel}</span>
@@ -595,6 +667,16 @@ export default function App() {
       <style>{CSS}</style>
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
 
+      {/* ── PLAYER MODAL ── */}
+      {viewingPlayer && (
+        <PlayerModal
+          player={viewingPlayer}
+          allPicks={allPicks}
+          games={games}
+          onClose={() => setViewingPlayer(null)}
+        />
+      )}
+
       {/* ── ADMIN MODAL ── */}
       {showAdminModal && (
         <div className="modal-overlay" onClick={() => setShowAdminModal(false)}>
@@ -624,8 +706,8 @@ export default function App() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "4px", gap: 3, border: "1px solid rgba(255,255,255,0.07)" }}>
-              {[["picks","My Picks"],["group","Group Plays"]].map(([p, label]) => (
-                <button key={p} className="nav-btn" onClick={() => setPage(p)} style={{ padding: "8px 16px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 9, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 12, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", letterSpacing: 0.1 }}>
+              {[["picks","My Picks"],["group","Group Plays"],["players","Players"]].map(([p, label]) => (
+                <button key={p} className="nav-btn" onClick={() => setPage(p)} style={{ padding: "8px 14px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 9, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 12, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", letterSpacing: 0.1 }}>
                   {label}
                   {p==="group" && groupPlays.length>0 && <span style={{ position: "absolute", top: 5, right: 5, width: 7, height: 7, background: "#0ea5e9", borderRadius: "50%", boxShadow: "0 0 8px #0ea5e9" }} />}
                 </button>
@@ -669,7 +751,7 @@ export default function App() {
             <div style={{ maxWidth: 660, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase" }}>Filed:</span>
               {submitters.map(s => (
-                <span key={s} style={{ background: s===username?"rgba(30,144,255,0.25)":"rgba(30,144,255,0.12)", border: `1px solid ${s===username?"rgba(30,144,255,0.5)":"rgba(30,144,255,0.25)"}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#bae6fd", fontWeight: s===username?700:400 }}>
+                <span key={s} onClick={() => setViewingPlayer(s)} style={{ background: s===username?"rgba(30,144,255,0.25)":"rgba(30,144,255,0.12)", border: `1px solid ${s===username?"rgba(30,144,255,0.5)":"rgba(30,144,255,0.25)"}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#bae6fd", fontWeight: s===username?700:400, cursor: "pointer", transition: "all 0.15s" }}>
                   {s}{!allPicks[s]?.is_public ? " 🔒" : ""}
                 </span>
               ))}
@@ -863,7 +945,7 @@ export default function App() {
               <>
                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(30,144,255,0.7)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10 }}>🔒 Consensus Plays</div>
                 {groupPlays.map(([key, people, dissenters], i) => (
-                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={false} />
+                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={false} onPlayerClick={setViewingPlayer} />
                 ))}
               </>
             )}
@@ -873,10 +955,80 @@ export default function App() {
               <>
                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10, marginTop: groupPlays.length>0?24:0 }}>Other Plays</div>
                 {otherPlays.map(([key, people, dissenters], i) => (
-                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={true} />
+                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={true} onPlayerClick={setViewingPlayer} />
                 ))}
               </>
             )}
+          </div>
+        )}
+
+        {/* ═══ PLAYERS PAGE ═══ */}
+        {page === "players" && (
+          <div className="fade-up">
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{TODAY_LABEL}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Players</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{submitters.length} player{submitters.length !== 1 ? "s" : ""} filed picks today</div>
+            </div>
+
+            {submitters.length === 0 ? (
+              <div className="glass-card" style={{ borderRadius: 16, padding: "60px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: 42, marginBottom: 14 }}>👀</div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>Nobody's filed yet</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)" }}>Check back once people submit their picks.</div>
+              </div>
+            ) : submitters.map((s, i) => {
+              const playerPicks = allPicks[s] || {};
+              const isPrivate = !playerPicks.is_public;
+              const isMe = s === username;
+              const keys = Object.keys(playerPicks.selections || {});
+              return (
+                <div key={s} className="glass-card fade-up" style={{ borderRadius: 16, marginBottom: 10, overflow: "hidden", animationDelay: `${i * 0.05}s`, border: isMe ? "1px solid rgba(30,144,255,0.3)" : undefined }} >
+                  <div style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 12, background: isMe ? "linear-gradient(135deg, #1E90FF, #0ea5e9)" : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, color: isMe ? "#fff" : "rgba(255,255,255,0.5)", flexShrink: 0 }}>
+                        {s.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 7 }}>
+                          {s}
+                          {isMe && <span style={{ fontSize: 10, background: "rgba(30,144,255,0.25)", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 6, padding: "2px 7px", color: "#bae6fd", fontWeight: 600, letterSpacing: 0.5 }}>YOU</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
+                          {keys.length} pick{keys.length !== 1 ? "s" : ""} · {isPrivate ? "🔒 Private" : "🌐 Public"}
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => setViewingPlayer(s)} style={{ padding: "8px 16px", background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 10, color: "#bae6fd", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                      View →
+                    </button>
+                  </div>
+                  {/* Preview picks — public only */}
+                  {!isPrivate && keys.length > 0 && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "10px 20px 14px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {keys.slice(0, 4).map(key => {
+                        const [gid, bt] = key.split("__");
+                        const g = games.find(x => x.id === gid);
+                        if (!g) return null;
+                        const BT = { spread_away: (g) => ({ label: g.away, line: g.spread.away }), spread_home: (g) => ({ label: g.home, line: g.spread.home }), over: (g) => ({ label: "Over", line: g.total }), under: (g) => ({ label: "Under", line: g.total }), ml_away: (g) => ({ label: g.away, line: `ML ${g.ml.away}` }), ml_home: (g) => ({ label: g.home, line: `ML ${g.ml.home}` }) };
+                        const { label, line } = BT[bt](g);
+                        return (
+                          <span key={key} style={{ background: "rgba(30,144,255,0.1)", border: "1px solid rgba(30,144,255,0.2)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd" }}>
+                            {label} {line}
+                          </span>
+                        );
+                      })}
+                      {keys.length > 4 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", padding: "3px 6px" }}>+{keys.length - 4} more</span>}
+                    </div>
+                  )}
+                  {isPrivate && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "10px 20px 12px" }}>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontStyle: "italic" }}>Picks are private</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -909,4 +1061,3 @@ export default function App() {
     </div>
   );
 }
-
