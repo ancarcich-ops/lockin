@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
-console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
-
 // ─── SAMPLE GAMES ─────────────────────────────────────────────────────────────
 const SAMPLE_GAMES = [
   { id: "g1",  away: "Pittsburgh",      home: "Stanford",        time: "TBD",      spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
@@ -129,27 +127,32 @@ export default function App() {
 
   // ── Auth init ────────────────────────────────────────────────────────────
   useEffect(() => {
-    // onAuthStateChange fires immediately with the current session on mount,
-    // so we only need this one listener — no need for getSession separately
+    console.log("[LockIn] auth init firing");
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log("[LockIn] onAuthStateChange event:", _event, "session:", !!session);
       setSession(session);
       if (session) {
+        console.log("[LockIn] loading username for", session.user.id);
         const uname = await loadUsername(session.user.id);
+        console.log("[LockIn] got username:", uname);
         if (uname) {
           setUsername(uname);
         } else {
-          // Profile missing — sign out to avoid infinite loading
+          console.warn("[LockIn] no profile found, signing out");
           await supabase.auth.signOut();
         }
       }
+      console.log("[LockIn] setting authLoading false");
       setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
   async function loadUsername(userId) {
+    console.log("[LockIn] querying profiles for", userId);
     const { data, error } = await supabase.from("profiles").select("username").eq("id", userId).single();
-    if (error) console.error("loadUsername error:", error);
+    if (error) console.error("[LockIn] loadUsername error:", error);
+    console.log("[LockIn] profiles result:", data);
     return data?.username || null;
   }
 
