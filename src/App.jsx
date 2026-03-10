@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
+console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
+
 // ─── SAMPLE GAMES ─────────────────────────────────────────────────────────────
 const SAMPLE_GAMES = [
   { id: "g1",  away: "Pittsburgh",      home: "Stanford",        time: "TBD",      spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
