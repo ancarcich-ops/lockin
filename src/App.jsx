@@ -149,11 +149,11 @@ export default function App() {
   }, []);
 
   async function loadUsername(userId) {
-    console.log("[LockIn] querying profiles for", userId);
-    const { data, error } = await supabase.from("profiles").select("username").eq("id", userId).single();
-    if (error) console.error("[LockIn] loadUsername error:", error);
-    console.log("[LockIn] profiles result:", data);
-    return data?.username || null;
+    console.log("[LockIn] getting user metadata for", userId);
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) console.error("[LockIn] getUser error:", error);
+    console.log("[LockIn] user metadata:", user?.user_metadata);
+    return user?.user_metadata?.username || null;
   }
 
   async function handleSignup() {
@@ -165,10 +165,16 @@ export default function App() {
     const { data: existing } = await supabase.from("profiles").select("id").eq("username", authUser.trim()).maybeSingle();
     if (existing) { setAuthError("Username already taken."); setAuthWorking(false); return; }
     const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
-    const { data, error } = await supabase.auth.signUp({ email: fakeEmail, password: authPass });
+    const { data, error } = await supabase.auth.signUp({
+      email: fakeEmail,
+      password: authPass,
+      options: { data: { username: authUser.trim() } }
+    });
     if (error) { setAuthError(error.message); setAuthWorking(false); return; }
-    // Create profile
-    await supabase.from("profiles").insert({ id: data.user.id, username: authUser.trim() });
+    // Also insert into profiles for group play name display
+    if (data.user) {
+      await supabase.from("profiles").upsert({ id: data.user.id, username: authUser.trim() });
+    }
     setUsername(authUser.trim());
     setAuthWorking(false);
   }
