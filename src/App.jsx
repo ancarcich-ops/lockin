@@ -112,7 +112,7 @@ export default function App() {
   const [myPicks, setMyPicks]               = useState(null); // null = not submitted today
   const [selectedPicks, setSelectedPicks]   = useState({});
   const [isPublic, setIsPublic]             = useState(true);
-  const [loading, setLoading]               = useState(true);
+  const [loading, setLoading]               = useState(false);
   const [expandedGame, setExpandedGame]     = useState(null);
   const [search, setSearch]                 = useState("");
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
@@ -127,26 +127,27 @@ export default function App() {
 
   // ── Auth init ────────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        const uname = await loadUsername(session.user.id);
-        if (uname) setUsername(uname);
-      }
-      setAuthLoading(false);
-    });
+    // onAuthStateChange fires immediately with the current session on mount,
+    // so we only need this one listener — no need for getSession separately
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session) {
         const uname = await loadUsername(session.user.id);
-        if (uname) setUsername(uname);
+        if (uname) {
+          setUsername(uname);
+        } else {
+          // Profile missing — sign out to avoid infinite loading
+          await supabase.auth.signOut();
+        }
       }
+      setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
   async function loadUsername(userId) {
-    const { data } = await supabase.from("profiles").select("username").eq("id", userId).single();
+    const { data, error } = await supabase.from("profiles").select("username").eq("id", userId).single();
+    if (error) console.error("loadUsername error:", error);
     return data?.username || null;
   }
 
