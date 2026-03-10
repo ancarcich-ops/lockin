@@ -199,9 +199,8 @@ export default function App() {
       let mine = null;
       picksRows.forEach(row => {
         // Always include own picks; only include others' public picks
-        if (row.username === username || row.is_public) {
-          built[row.username] = { selections: row.selections, is_public: row.is_public };
-        }
+        // Include all picks for group play tallying; is_public flag controls UI display
+        built[row.username] = { selections: row.selections, is_public: row.is_public };
         if (row.username === username) mine = row;
       });
       setAllPicks(built);
@@ -379,10 +378,9 @@ export default function App() {
   }
 
   function getGroupPlays() {
-    // Only use public picks for group plays
-    const publicPicks = Object.entries(allPicks).filter(([, v]) => v.is_public);
+    const allPicksEntries = Object.entries(allPicks);
     const tally = {};
-    publicPicks.forEach(([person, { selections }]) =>
+    allPicksEntries.forEach(([person, { selections }]) =>
       Object.keys(selections).forEach(key => {
         if (!tally[key]) tally[key] = [];
         tally[key].push(person);
@@ -406,7 +404,7 @@ export default function App() {
     return plays.map(([key, people]) => {
       const [gid, bt] = key.split("__");
       const oppKey = `${gid}__${OPPOSITES[bt]}`;
-      const dissenters = publicPicks
+      const dissenters = allPicksEntries
         .filter(([, { selections }]) => selections[oppKey])
         .map(([person]) => person);
       const consensus = isConsensusPlay(people.length, dissenters.length);
