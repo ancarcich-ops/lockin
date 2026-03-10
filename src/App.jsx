@@ -129,19 +129,25 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
-      if (session) await loadUsername(session.user.id);
+      if (session) {
+        const uname = await loadUsername(session.user.id);
+        if (uname) setUsername(uname);
+      }
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      if (session) await loadUsername(session.user.id);
+      if (session) {
+        const uname = await loadUsername(session.user.id);
+        if (uname) setUsername(uname);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
 
   async function loadUsername(userId) {
     const { data } = await supabase.from("profiles").select("username").eq("id", userId).single();
-    if (data) setUsername(data.username);
+    return data?.username || null;
   }
 
   async function handleSignup() {
@@ -183,12 +189,14 @@ export default function App() {
   // ── Load data ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session || !username) return;
-    loadData();
+    loadData(username);
   }, [session, username]);
 
-  async function loadData() {
+  async function loadData(activeUsername) {
+    const uname = activeUsername || username;
+    if (!uname) { setLoading(false); return; }
     setLoading(true);
-    // Load all public picks for today + own picks
+    try {
     const { data: picksRows } = await supabase
       .from("picks")
       .select("username, selections, is_public, user_id")
@@ -198,10 +206,9 @@ export default function App() {
       const built = {};
       let mine = null;
       picksRows.forEach(row => {
-        // Always include own picks; only include others' public picks
         // Include all picks for group play tallying; is_public flag controls UI display
         built[row.username] = { selections: row.selections, is_public: row.is_public };
-        if (row.username === username) mine = row;
+        if (row.username === uname) mine = row;
       });
       setAllPicks(built);
       if (mine) {
@@ -223,7 +230,11 @@ export default function App() {
       setPlayResults(built);
       recomputeRecord(built);
     }
-    setLoading(false);
+    } catch (err) {
+      console.error("loadData error:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function recomputeRecord(results) {
