@@ -159,8 +159,8 @@ export default function App() {
     if (authPass !== authPass2) return setAuthError("Passwords don't match.");
     if (authUser.trim().length < 2) return setAuthError("Username must be at least 2 characters.");
     setAuthWorking(true); setAuthError("");
-    // Check username taken
-    const { data: existing } = await supabase.from("profiles").select("id").eq("username", authUser.trim()).maybeSingle();
+    // Check username taken (case-insensitive)
+    const { data: existing } = await supabase.from("profiles").select("id").ilike("username", authUser.trim()).maybeSingle();
     if (existing) { setAuthError("Username already taken."); setAuthWorking(false); return; }
     const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
     const { data, error } = await supabase.auth.signUp({
@@ -187,13 +187,14 @@ export default function App() {
   async function handleLogin() {
     if (!authUser.trim() || !authPass.trim()) return setAuthError("Fill in all fields.");
     setAuthWorking(true); setAuthError("");
-    // Look up username → email
-    const { data: profile } = await supabase.from("profiles").select("id, username").eq("username", authUser.trim()).maybeSingle();
-    if (!profile) { setAuthError("Username not found."); setAuthWorking(false); return; }
+    // Construct fake email directly — no DB lookup needed
+    // Username is case-preserved from signup, so normalize to lowercase for email
     const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
-    const { error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: authPass });
-    if (error) { setAuthError("Wrong password."); setAuthWorking(false); return; }
-    setUsername(profile.username);
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: authPass });
+    if (error) { setAuthError("Username or password is incorrect."); setAuthWorking(false); return; }
+    // Get display username from metadata (set at signup)
+    const displayUsername = signInData.user?.user_metadata?.username || authUser.trim();
+    setUsername(displayUsername);
     // Save credentials locally for quick switch
     const updated = [
       { username: authUser.trim(), password: authPass },
