@@ -128,18 +128,18 @@ export default function App() {
   // ── Auth init ────────────────────────────────────────────────────────────
   useEffect(() => {
     console.log("[LockIn] auth init firing");
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log("[LockIn] onAuthStateChange event:", _event, "session:", !!session);
       setSession(session);
       if (session) {
-        console.log("[LockIn] loading username for", session.user.id);
-        const uname = await loadUsername(session.user.id);
-        console.log("[LockIn] got username:", uname);
+        // Read username directly from session metadata — no network call needed
+        const uname = session.user?.user_metadata?.username || null;
+        console.log("[LockIn] username from session metadata:", uname);
         if (uname) {
           setUsername(uname);
         } else {
-          console.warn("[LockIn] no profile found, signing out");
-          await supabase.auth.signOut();
+          console.warn("[LockIn] no username in metadata, signing out");
+          supabase.auth.signOut();
         }
       }
       console.log("[LockIn] setting authLoading false");
