@@ -7,7 +7,7 @@ const SAMPLE_GAMES = [
   { id: "g1",  away: "Pittsburgh",      home: "Stanford",        time: "TBD",      spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g2",  away: "Alcorn State",    home: "Prairie View",    time: "11:00 AM", spread: { away: "+6.5",  home: "-6.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g3",  away: "Utah",            home: "Cincinnati",      time: "12:00 PM", spread: { away: "+12.5", home: "-12.5" }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
-  { id: "g4",  away: "Syracuse",        home: "SMU",             time: "1:30 PM",  spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
+  { id: "g4",  away: "Syracuse",        home: "SMU",             time: "1:30 PM",  spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },a
   { id: "g5",  away: "Maryland",        home: "Oregon",          time: "2:00 PM",  spread: { away: "+3.5",  home: "-3.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g6",  away: "UMass Lowell",    home: "UMBC",            time: "3:00 PM",  spread: { away: "+7.5",  home: "-7.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g7",  away: "Missouri St",     home: "FIU",             time: "3:30 PM",  spread: { away: "+1.5",  home: "-1.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
@@ -226,6 +226,18 @@ export default function App() {
     return `${label} ${line}`;
   }
 
+  function isConsensusPlay(agreers, dissenters) {
+    const a = agreers;
+    const d = dissenters;
+    if (a < 2) return false;
+    if (d === 0) return true;
+    if (d === 1 && a >= 4) return true;
+    if (d === 2 && a >= 6) return true;
+    if (d === 3 && a >= 8) return true;
+    if (d === 4 && a >= 10) return true;
+    return false;
+  }
+
   function getGroupPlays() {
     const tally = {};
     Object.entries(allPicks).forEach(([person, picks]) =>
@@ -234,20 +246,39 @@ export default function App() {
         tally[key].push(person);
       })
     );
+
+    // Dedupe — only keep the side with more people per game+bettype pair
+    const seen = new Set();
     const plays = Object.entries(tally)
-      .filter(([, p]) => p.length >= 2)
+      .filter(([key, people]) => {
+        if (people.length < 2) return false;
+        const [gid, bt] = key.split("__");
+        const oppKey = `${gid}__${OPPOSITES[bt]}`;
+        const oppCount = tally[oppKey]?.length || 0;
+        // Skip if opposite side has more people (we'll render that side instead)
+        if (oppCount > people.length) return false;
+        // Skip dupes (both sides equal — only render one)
+        const dedupe = [key, oppKey].sort().join("|");
+        if (seen.has(dedupe)) return false;
+        seen.add(dedupe);
+        return true;
+      })
       .sort((a, b) => b[1].length - a[1].length);
+
     return plays.map(([key, people]) => {
       const [gid, bt] = key.split("__");
       const oppKey = `${gid}__${OPPOSITES[bt]}`;
       const dissenters = Object.entries(allPicks)
         .filter(([, picks]) => picks[oppKey])
         .map(([person]) => person);
-      return [key, people, dissenters];
+      const consensus = isConsensusPlay(people.length, dissenters.length);
+      return [key, people, dissenters, consensus];
     });
   }
 
-  const groupPlays = getGroupPlays();
+  const allPlays = getGroupPlays();
+  const groupPlays = allPlays.filter(([,,,consensus]) => consensus);
+  const otherPlays = allPlays.filter(([,,,consensus]) => !consensus);
   const submitters = Object.keys(allPicks);
   const pickCount  = Object.keys(selectedPicks).length;
   const canSubmit  = name.trim() && pickCount > 0;
@@ -520,14 +551,18 @@ export default function App() {
               </div>
             )}
 
-            {groupPlays.length === 0 ? (
+            {groupPlays.length === 0 && otherPlays.length === 0 ? (
               <div className="glass-card" style={{ borderRadius: 16, padding: "60px 20px", textAlign: "center" }}>
                 <div style={{ fontSize: 42, marginBottom: 14 }}>🤝</div>
                 <div style={{ fontSize: 17, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>No group plays yet</div>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)" }}>Need at least 2 people on the same side.</div>
               </div>
-            ) : (
-              groupPlays.map(([key, people, dissenters], i) => {
+            ) : null}
+
+            {groupPlays.length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(30,144,255,0.7)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10 }}>🔒 Consensus Plays</div>
+                {groupPlays.map(([key, people, dissenters], i) => {
                 const [gid, bt] = key.split("__");
                 const game = games.find(g => g.id === gid);
                 const label = getLabel(key);
@@ -599,7 +634,81 @@ export default function App() {
                     )}
                   </div>
                 );
-              })
+              })}
+              </>
+            )}
+
+            {otherPlays.length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10, marginTop: groupPlays.length > 0 ? 24 : 0 }}>Other Plays</div>
+                {otherPlays.map(([key, people, dissenters], i) => {
+                const [gid, bt] = key.split("__");
+                const game = games.find(g => g.id === gid);
+                const label = getLabel(key);
+                const oppLabel = getLabel(`${gid}__${OPPOSITES[bt]}`);
+                const result = playResults[key] || null;
+                const leftBorder = result === "win" ? "#4ade80" : result === "loss" ? "#f87171" : result === "push" ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.12)";
+                return (
+                  <div key={key} className="glass-card fade-up" style={{ borderRadius: 16, marginBottom: 10, animationDelay: `${i * 0.06}s`, borderLeft: `3px solid ${leftBorder}`, overflow: "hidden", opacity: 0.7 }}>
+                    <div style={{ padding: "16px 20px 14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 4, letterSpacing: -0.2 }}>{label}</div>
+                          {game && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>{game.away} @ {game.home} · {game.time} ET</div>}
+                        </div>
+                        <div style={{ textAlign: "center", minWidth: 44 }}>
+                          <div style={{ fontSize: 26, fontWeight: 800, color: "rgba(255,255,255,0.3)", lineHeight: 1 }}>{people.length}</div>
+                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase" }}>agree</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                        {people.map(p => (
+                          <span key={p} style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>{p}</span>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", letterSpacing: 1, textTransform: "uppercase", marginRight: 4 }}>Result:</span>
+                        {isAdmin ? (
+                          <>
+                            {[
+                              ["W", "win",  "#4ade80",               "rgba(74,222,128,0.18)",  "rgba(74,222,128,0.4)"],
+                              ["L", "loss", "#f87171",               "rgba(248,113,113,0.18)", "rgba(248,113,113,0.4)"],
+                              ["P", "push", "rgba(255,255,255,0.6)", "rgba(255,255,255,0.1)",  "rgba(255,255,255,0.3)"],
+                            ].map(([lbl, val, color, bg, border]) => (
+                              <button key={val} onClick={() => markResult(key, val)} style={{ padding: "5px 13px", borderRadius: 8, border: `1px solid ${result === val ? border : "rgba(255,255,255,0.1)"}`, background: result === val ? bg : "transparent", color: result === val ? color : "rgba(255,255,255,0.2)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                                {lbl}
+                              </button>
+                            ))}
+                            {result && (
+                              <button onClick={() => markResult(key, null)} style={{ marginLeft: 4, padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.2)", fontSize: 11, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>clear</button>
+                            )}
+                          </>
+                        ) : result ? (
+                          <span style={{ padding: "4px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: result === "win" ? "rgba(74,222,128,0.18)" : result === "loss" ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.1)", color: result === "win" ? "#4ade80" : result === "loss" ? "#f87171" : "rgba(255,255,255,0.6)", border: `1px solid ${result === "win" ? "rgba(74,222,128,0.4)" : result === "loss" ? "rgba(248,113,113,0.4)" : "rgba(255,255,255,0.3)"}` }}>
+                            {result === "win" ? "✓ Win" : result === "loss" ? "✗ Loss" : "~ Push"}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.12)", fontStyle: "italic" }}>Pending</span>
+                        )}
+                      </div>
+                    </div>
+                    {dissenters.length > 0 && (
+                      <div style={{ borderTop: "1px solid rgba(251,113,133,0.15)", background: "rgba(251,113,133,0.05)", padding: "9px 20px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12, color: "rgba(253,164,175,0.6)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 14 }}>⚠</span> Disagrees:
+                        </span>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          {dissenters.map(p => (
+                            <span key={p} style={{ background: "rgba(251,113,133,0.1)", border: "1px solid rgba(251,113,133,0.25)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "rgba(253,164,175,0.6)", fontWeight: 500 }}>{p}</span>
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.15)", marginLeft: "auto" }}>on {oppLabel}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              </>
             )}
           </div>
         )}
