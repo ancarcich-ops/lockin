@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+]import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
 // ─── SAMPLE GAMES ─────────────────────────────────────────────────────────────
@@ -183,7 +183,9 @@ export default function App() {
   // App
   const [page, setPage]                     = useState("picks");
   const [viewingPlayer, setViewingPlayer]   = useState(null); // username string or null
-  const [games]                             = useState(SAMPLE_GAMES);
+  const [games, setGames]                   = useState(SAMPLE_GAMES);
+  const [oddsLoading, setOddsLoading]       = useState(false);
+  const [oddsError, setOddsError]           = useState(null);
   const [allPicks, setAllPicks]             = useState({});   // { username: { selections, is_public } }
   const [myPicks, setMyPicks]               = useState(null); // null = not submitted today
   const [selectedPicks, setSelectedPicks]   = useState({});
@@ -298,6 +300,69 @@ export default function App() {
       localStorage.setItem("lockin_accounts", JSON.stringify(updated));
     }
     setAuthWorking(false);
+  }
+
+  // ── Fetch odds ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!session) return;
+    fetchOdds();
+  }, [session]);
+
+  async function fetchOdds() {
+    const apiKey = import.meta.env.VITE_ODDS_API_KEY;
+    if (!apiKey) return; // Fall back to SAMPLE_GAMES
+    setOddsLoading(true); setOddsError(null);
+    try {
+      // Fetch NCAAB + NBA games for today
+      const sports = ["basketball_ncaab", "basketball_nba"];
+      const allGames = [];
+      for (const sport of sports) {
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        // Filter to today's games only
+        const todayStr = TODAY_DATE;
+        const todayGames = data.filter(g => g.commence_time.startsWith(todayStr));
+        todayGames.forEach((g, i) => {
+          const h2h = g.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
+          const spreads = g.bookmakers?.[0]?.markets?.find(m => m.key === "spreads");
+          const totals = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals");
+          const awayTeam = g.away_team;
+          const homeTeam = g.home_team;
+          const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+          const awaySpread = spreads?.outcomes?.find(o => o.name === awayTeam);
+          const homeSpread = spreads?.outcomes?.find(o => o.name === homeTeam);
+          const over = totals?.outcomes?.find(o => o.name === "Over");
+          const awayML = h2h?.outcomes?.find(o => o.name === awayTeam);
+          const homeML = h2h?.outcomes?.find(o => o.name === homeTeam);
+          allGames.push({
+            id: `live_${sport}_${i}`,
+            away: awayTeam,
+            home: homeTeam,
+            time: `${time} ET`,
+            spread: {
+              away: awaySpread ? (awaySpread.point > 0 ? `+${awaySpread.point}` : `${awaySpread.point}`) : "N/A",
+              home: homeSpread ? (homeSpread.point > 0 ? `+${homeSpread.point}` : `${homeSpread.point}`) : "N/A",
+            },
+            total: over ? `${over.point}` : "N/A",
+            ml: {
+              away: awayML ? (awayML.price > 0 ? `+${awayML.price}` : `${awayML.price}`) : "N/A",
+              home: homeML ? (homeML.price > 0 ? `+${homeML.price}` : `${homeML.price}`) : "N/A",
+            },
+          });
+        });
+      }
+      if (allGames.length > 0) {
+        setGames(allGames);
+      }
+    } catch (err) {
+      console.error("Odds fetch error:", err);
+      setOddsError("Could not load live odds — showing default games.");
+    } finally {
+      setOddsLoading(false);
+    }
   }
 
   // ── Load data ────────────────────────────────────────────────────────────
@@ -767,6 +832,14 @@ export default function App() {
         {page === "picks" && (
           <div className="fade-up">
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 16 }}>{TODAY_LABEL}</div>
+
+            {/* Odds status */}
+            {oddsLoading && (
+              <div style={{ textAlign: "center", padding: "12px", fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 10 }}>⏳ Fetching live odds...</div>
+            )}
+            {oddsError && (
+              <div style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#fbbf24", marginBottom: 12 }}>⚠ {oddsError}</div>
+            )}
 
             {/* Already submitted — show their picks */}
             {hasSubmitted && (
