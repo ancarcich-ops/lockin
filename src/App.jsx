@@ -95,12 +95,16 @@ function PlayerModal({ player, allPicks, games, onClose }) {
           <div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginBottom: 14, fontStyle: "italic" }}>This player's picks are private — you can see which games they bet but not which side.</div>
             {keys.map(key => {
-              const [gid] = key.split("__");
-              const g = games.find(x => x.id === gid);
-              return g ? (
+              const stored = picks.selections[key];
+              const matchup = stored?.matchup || (() => {
+                const [gid] = key.split("__");
+                const g = games.find(x => x.id === gid);
+                return g ? `${g.away} @ ${g.home}` : null;
+              })();
+              return matchup ? (
                 <div key={key} style={{ padding: "10px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, marginBottom: 6 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>{g.away} @ {g.home}</div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 2 }}>{g.time} ET · Pick hidden</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>{matchup}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 2 }}>Pick hidden</div>
                 </div>
               ) : null;
             })}
@@ -108,8 +112,20 @@ function PlayerModal({ player, allPicks, games, onClose }) {
         ) : (
           keys.map(key => {
             const stored = picks.selections[key];
-            const displayLabel = stored?.label ? `${stored.label} ${stored.line}` : getLabel(key);
-            const matchup = stored?.matchup || null;
+            let displayLabel, matchup;
+            if (stored?.label) {
+              displayLabel = `${stored.label} ${stored.line}`;
+              matchup = stored.matchup || null;
+            } else {
+              const info = getLabel(key);
+              if (typeof info === "object" && info?.label) {
+                displayLabel = `${info.label} ${info.line}`;
+                matchup = info.game ? `${info.game.away} @ ${info.game.home}` : null;
+              } else {
+                displayLabel = typeof info === "string" ? info : key;
+                matchup = null;
+              }
+            }
             return (
               <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
                 <div>
@@ -316,22 +332,31 @@ export default function App() {
     setOddsLoading(true); setOddsError(null);
     try {
       // Check Supabase cache first — only fetch from API once per day
-      const { data: cached } = await supabase
+      const { data: cached, error: cacheError } = await supabase
         .from("group_results")
         .select("result")
         .eq("key", `__odds_cache__${TODAY_DATE}`)
+        .eq("date", TODAY_DATE)
         .maybeSingle();
 
+      console.log("[LockIn] odds cache check:", cached ? "HIT" : "MISS", cacheError?.message || "");
+
       if (cached?.result) {
-        const games = JSON.parse(cached.result);
-        if (games?.length > 0) {
-          setGames(games);
-          setOddsLoading(false);
-          return;
+        try {
+          const cachedGames = JSON.parse(cached.result);
+          if (cachedGames?.length > 0) {
+            console.log("[LockIn] loaded", cachedGames.length, "games from cache");
+            setGames(cachedGames);
+            setOddsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("[LockIn] cache parse error:", e);
         }
       }
 
       // No cache for today — fetch from API
+      console.log("[LockIn] cache miss — hitting odds API");
       const sports = ["basketball_ncaab"];
       const allGames = [];
       for (const sport of sports) {
@@ -547,10 +572,10 @@ export default function App() {
     };
     const { error } = await supabase.from("picks").upsert(payload, { onConflict: "username,date" });
     if (!error) {
-      setMyPicks({ selections: selectedPicks, is_public: isPublic });
+      setMyPicks({ selections: enriched, is_public: isPublic });
       setAllPicks(prev => ({
         ...prev,
-        [username]: { selections: selectedPicks, is_public: isPublic },
+        [username]: { selections: enriched, is_public: isPublic },
       }));
     } else {
       alert("Something went wrong saving your picks. Try again.");
