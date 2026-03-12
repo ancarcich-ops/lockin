@@ -107,12 +107,14 @@ function PlayerModal({ player, allPicks, games, onClose }) {
           </div>
         ) : (
           keys.map(key => {
-            const info = getLabel(key);
+            const stored = picks.selections[key];
+            const displayLabel = stored?.label ? `${stored.label} ${stored.line}` : getLabel(key);
+            const matchup = stored?.matchup || null;
             return (
               <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{info.label} {info.line}</div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{info.game?.away} @ {info.game?.home}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
+                  {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
                 </div>
               </div>
             );
@@ -521,10 +523,25 @@ export default function App() {
 
   async function submitPicks() {
     if (!Object.keys(selectedPicks).length) return;
+    // Enrich selections with human-readable labels so display never depends on current game list
+    const enriched = {};
+    Object.keys(selectedPicks).forEach(key => {
+      const [gid, bt] = key.split("__");
+      const game = games.find(g => g.id === gid);
+      const BT = {
+        spread_away: (g) => ({ label: g.away, line: g.spread.away, matchup: `${g.away} @ ${g.home}` }),
+        spread_home: (g) => ({ label: g.home, line: g.spread.home, matchup: `${g.away} @ ${g.home}` }),
+        over:        (g) => ({ label: "Over",  line: g.total,        matchup: `${g.away} @ ${g.home}` }),
+        under:       (g) => ({ label: "Under", line: g.total,        matchup: `${g.away} @ ${g.home}` }),
+        ml_away:     (g) => ({ label: g.away,  line: `ML ${g.ml.away}`, matchup: `${g.away} @ ${g.home}` }),
+        ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}`, matchup: `${g.away} @ ${g.home}` }),
+      };
+      enriched[key] = game ? BT[bt]?.(game) || true : true;
+    });
     const payload = {
       username,
       user_id: session.user.id,
-      selections: selectedPicks,
+      selections: enriched,
       is_public: isPublic,
       date: TODAY_DATE,
     };
@@ -878,14 +895,21 @@ export default function App() {
 
                 {/* Show their picks summary */}
                 {Object.keys(myPicks.selections).map(key => {
-                  const label = getLabel(key);
-                  const [gid] = key.split("__");
-                  const game = games.find(g => g.id === gid);
+                  const stored = myPicks.selections[key];
+                  // Use stored label if available, fall back to live game lookup
+                  const displayLabel = stored?.label
+                    ? `${stored.label} ${stored.line}`
+                    : getLabel(key);
+                  const matchup = stored?.matchup || (() => {
+                    const [gid] = key.split("__");
+                    const game = games.find(g => g.id === gid);
+                    return game ? `${game.away} @ ${game.home}` : null;
+                  })();
                   return (
                     <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{label}</div>
-                        {game && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{game.away} @ {game.home}</div>}
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
+                        {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
                       </div>
                     </div>
                   );
@@ -1100,14 +1124,11 @@ export default function App() {
                   {!isPrivate && keys.length > 0 && (
                     <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "10px 20px 14px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {keys.slice(0, 4).map(key => {
-                        const [gid, bt] = key.split("__");
-                        const g = games.find(x => x.id === gid);
-                        if (!g) return null;
-                        const BT = { spread_away: (g) => ({ label: g.away, line: g.spread.away }), spread_home: (g) => ({ label: g.home, line: g.spread.home }), over: (g) => ({ label: "Over", line: g.total }), under: (g) => ({ label: "Under", line: g.total }), ml_away: (g) => ({ label: g.away, line: `ML ${g.ml.away}` }), ml_home: (g) => ({ label: g.home, line: `ML ${g.ml.home}` }) };
-                        const { label, line } = BT[bt](g);
+                        const stored = playerPicks.selections[key];
+                        if (!stored?.label) return null;
                         return (
                           <span key={key} style={{ background: "rgba(30,144,255,0.1)", border: "1px solid rgba(30,144,255,0.2)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd" }}>
-                            {label} {line}
+                            {stored.label} {stored.line}
                           </span>
                         );
                       })}
