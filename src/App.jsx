@@ -1139,7 +1139,7 @@ export default function App() {
               </div>
               {/* Public / Private toggle */}
               {pickCount > 0 && (
-                <div onClick={d() => setIsPublic(p => !p)} className="toggle-track" style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: "5px 12px", cursor: "pointer", userSelect: "none" }}>
+                <div onClick={() => setIsPublic(p => !p)} className="toggle-track" style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: "5px 12px", cursor: "pointer", userSelect: "none" }}>
                   <span style={{ fontSize: 13 }}>{isPublic ? "🌐" : "🔒"}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: isPublic?"#bae6fd":"rgba(255,255,255,0.4)" }}>{isPublic ? "Public" : "Private"}</span>
                 </div>
