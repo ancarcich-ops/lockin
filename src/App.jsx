@@ -786,7 +786,7 @@ export default function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: dimmed ? 15 : 18, fontWeight: 700, color: dimmed ? "rgba(255,255,255,0.6)" : "#fff", marginBottom: 5, letterSpacing: -0.2 }}>{label}</div>
-              {game && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{game.away} @ {game.home} · {game.time} ET</div>}
+              {game && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{game.away} @ {game.home} · {game.time}</div>}
             </div>
             <div style={{ textAlign: "center", minWidth: 54 }}>
               <div style={{ fontSize: dimmed ? 26 : 36, fontWeight: 800, color: heat.color, lineHeight: 1, textShadow: dimmed ? "none" : `0 0 20px ${heat.glow}` }}>{people.length}</div>
@@ -1015,7 +1015,7 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", letterSpacing: -0.3 }}>Lock In</div>
-              <div style={{ fontSize: 9, color: isAdmin?"rgba(251,191,36,0.7)":"rgba(255,255,255,0.3)", letterSpacing: 0.8, marginTop: 1 }}>{isAdmin ? "ADMIN MODE" : TODAY_LABEL}</div>
+              <div style={{ fontSize: 9, color: isAdmin?"rgba(251,191,36,0.7)":"rgba(255,255,255,0.3)", letterSpacing: 0.8, marginTop: 1 }}>{isAdmin ? "ADMIN MODE" : new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Los_Angeles" })}</div>
             </div>
           </div>
 
@@ -1063,8 +1063,8 @@ export default function App() {
 
         {submitters.length > 0 && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "7px 22px" }}>
-            <div style={{ maxWidth: 660, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase" }}>Filed:</span>
+            <div style={{ maxWidth: 660, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 2, scrollbarWidth: "none" }}>
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase", flexShrink: 0 }}>Filed:</span>
               {submitters.map(s => (
                 <span key={s} onClick={() => setViewingPlayer(s)} style={{ background: s===username?"rgba(30,144,255,0.25)":"rgba(30,144,255,0.12)", border: `1px solid ${s===username?"rgba(30,144,255,0.5)":"rgba(30,144,255,0.25)"}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#bae6fd", fontWeight: s===username?700:400, cursor: "pointer", transition: "all 0.15s" }}>
                   {s}{!allPicks[s]?.is_public ? " 🔒" : ""}
@@ -1162,7 +1162,7 @@ export default function App() {
                       <div className="game-row" onClick={() => setExpandedGame(isOpen ? null : game.id)} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isOpen?"1px solid rgba(255,255,255,0.06)":"none" }}>
                         <div>
                           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{game.away} <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 300 }}>@</span> {game.home}</div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{game.time} ET</div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{game.time}</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           {gamePicks.length > 0 && <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.35), rgba(14,165,233,0.35))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd", fontWeight: 600 }}>{gamePicks.length} pick{gamePicks.length!==1?"s":""}</span>}
