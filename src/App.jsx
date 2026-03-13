@@ -48,7 +48,8 @@ const TODAY_LABEL = new Date().toLocaleDateString("en-US", {
   weekday: "long", month: "long", day: "numeric", year: "numeric",
 });
 
-const TODAY_DATE = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+// Use Eastern time for date so cache key is consistent all day in US
+const TODAY_DATE = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }); // YYYY-MM-DD
 
 const ADMIN_PASSWORD = "football4";
 
@@ -141,6 +142,20 @@ function PlayerModal({ player, allPicks, games, onClose }) {
   );
 }
 
+// ─── CELEBRATION CSS (appended to main CSS string) ──
+const CELEBRATION_CSS = `
+  @keyframes shockwave { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(8); opacity: 0; } }
+  @keyframes shockwave2 { 0% { transform: scale(0); opacity: 0.7; } 100% { transform: scale(12); opacity: 0; } }
+  @keyframes fireball { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 40% { transform: scale(1.4) rotate(15deg); opacity: 1; } 100% { transform: scale(3) rotate(30deg); opacity: 0; } }
+  @keyframes debris { 0% { transform: translate(0,0) rotate(0deg) scale(1); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0); opacity: 0; } }
+  @keyframes mushroom-stem { 0% { transform: scaleY(0); opacity: 1; } 60% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+  @keyframes mushroom-cap { 0% { transform: scale(0) translateY(0); opacity: 1; } 50% { transform: scale(1) translateY(-20px); opacity: 1; } 100% { transform: scale(1.3) translateY(-40px); opacity: 0; } }
+  @keyframes celebration-text { 0% { transform: scale(0) rotate(-10deg); opacity: 0; } 50% { transform: scale(1.15) rotate(2deg); opacity: 1; } 70% { transform: scale(0.95) rotate(-1deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+  @keyframes flash { 0% { opacity: 0; } 10% { opacity: 0.9; } 30% { opacity: 0.4; } 50% { opacity: 0.7; } 70% { opacity: 0.2; } 100% { opacity: 0; } }
+  @keyframes confetti-fall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0.3; } }
+  @keyframes settle-in { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+`;
+
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
@@ -197,6 +212,9 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("lockin_accounts") || "[]"); } catch { return []; }
   });
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [celebrationWins, setCelebrationWins] = useState([]); // plays to celebrate
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationPhase, setCelebrationPhase] = useState("explode"); // explode | settle
 
   // App
   const [page, setPage]                     = useState("picks");
@@ -212,6 +230,7 @@ export default function App() {
   const [expandedGame, setExpandedGame]     = useState(null);
   const [search, setSearch]                 = useState("");
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
+  const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
 
   // Admin
@@ -321,42 +340,43 @@ export default function App() {
   }
 
   // ── Fetch odds ───────────────────────────────────────────────────────────
+  // Load from cache on session start — admin can manually refresh via button
+  const oddsFetchedRef = useRef(false);
   useEffect(() => {
     if (!session) return;
-    fetchOdds();
+    if (oddsFetchedRef.current) return;
+    oddsFetchedRef.current = true;
+    loadOddsFromCache();
   }, [session]);
 
-  async function fetchOdds() {
-    const apiKey = import.meta.env.VITE_ODDS_API_KEY;
-    if (!apiKey) return;
-    setOddsLoading(true); setOddsError(null);
+  async function loadOddsFromCache() {
     try {
-      // Check Supabase cache first — only fetch from API once per day
-      const { data: cached, error: cacheError } = await supabase
+      const { data: cached } = await supabase
         .from("group_results")
         .select("result")
         .eq("key", `__odds_cache__${TODAY_DATE}`)
         .eq("date", TODAY_DATE)
         .maybeSingle();
-
-      console.log("[LockIn] odds cache check:", cached ? "HIT" : "MISS", cacheError?.message || "");
-
       if (cached?.result) {
-        try {
-          const cachedGames = JSON.parse(cached.result);
-          if (cachedGames?.length > 0) {
-            console.log("[LockIn] loaded", cachedGames.length, "games from cache");
-            setGames(cachedGames);
-            setOddsLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.error("[LockIn] cache parse error:", e);
+        const cachedGames = JSON.parse(cached.result);
+        if (cachedGames?.length > 0) {
+          console.log("[LockIn] loaded", cachedGames.length, "games from cache");
+          setGames(cachedGames);
         }
+      } else {
+        console.log("[LockIn] no cache for today yet — admin can refresh odds");
       }
+    } catch (err) {
+      console.error("[LockIn] cache load error:", err);
+    }
+  }
 
-      // No cache for today — fetch from API
-      console.log("[LockIn] cache miss — hitting odds API");
+  async function fetchOdds() {
+    const apiKey = import.meta.env.VITE_ODDS_API_KEY;
+    if (!apiKey) { setOddsError("No API key configured."); return; }
+    setOddsLoading(true); setOddsError(null);
+    try {
+      console.log("[LockIn] admin triggered odds refresh — hitting API");
       const sports = ["basketball_ncaab"];
       const allGames = [];
       for (const sport of sports) {
@@ -372,7 +392,7 @@ export default function App() {
           const totals = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals");
           const awayTeam = g.away_team;
           const homeTeam = g.home_team;
-          const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+          const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
           const awaySpread = spreads?.outcomes?.find(o => o.name === awayTeam);
           const homeSpread = spreads?.outcomes?.find(o => o.name === homeTeam);
           const over = totals?.outcomes?.find(o => o.name === "Over");
@@ -455,6 +475,22 @@ export default function App() {
       resultsRows.forEach(row => { built[row.key] = row.result; });
       setPlayResults(built);
       recomputeRecord(built);
+      checkForNewWins(built, allGames.length > 0 ? allGames : games);
+    }
+
+    // Load all-time record across all dates
+    const { data: allResultsRows } = await supabase
+      .from("group_results")
+      .select("result")
+      .not("key", "like", "__odds_cache__%");
+    if (allResultsRows) {
+      const atRec = { wins: 0, losses: 0, pushes: 0 };
+      allResultsRows.forEach(row => {
+        if (row.result === "win") atRec.wins++;
+        else if (row.result === "loss") atRec.losses++;
+        else if (row.result === "push") atRec.pushes++;
+      });
+      setAllTimeRecord(atRec);
     }
     } catch (err) {
       console.error("loadData error:", err);
@@ -471,6 +507,44 @@ export default function App() {
       else if (r === "push") rec.pushes++;
     });
     setRecord(rec);
+  }
+
+  // Auto-advance celebration from explode to settle phase
+  useEffect(() => {
+    if (showCelebration && celebrationPhase === "explode") {
+      const t = setTimeout(() => setCelebrationPhase("settle"), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [showCelebration, celebrationPhase]);
+
+  function checkForNewWins(results, currentGames) {
+    const seenKey = `lockin_seen_wins_${TODAY_DATE}`;
+    const seen = new Set(JSON.parse(localStorage.getItem(seenKey) || "[]"));
+    const newWins = Object.entries(results)
+      .filter(([key, result]) => result === "win" && !seen.has(key) && !key.startsWith("__"))
+      .map(([key]) => {
+        const [gid, bt] = key.split("__");
+        const game = currentGames.find(g => g.id === gid);
+        const label = game ? (() => {
+          const BT = {
+            spread_away: (g) => `${g.away} ${g.spread.away}`,
+            spread_home: (g) => `${g.home} ${g.spread.home}`,
+            over: (g) => `Over ${g.total}`,
+            under: (g) => `Under ${g.total}`,
+            ml_away: (g) => `${g.away} ML`,
+            ml_home: (g) => `${g.home} ML`,
+          };
+          return BT[bt]?.(game) || key;
+        })() : key;
+        return { key, label };
+      });
+    if (newWins.length > 0 && !isAdmin) {
+      const updatedSeen = [...seen, ...newWins.map(w => w.key)];
+      localStorage.setItem(seenKey, JSON.stringify(updatedSeen));
+      setCelebrationWins(newWins);
+      setCelebrationPhase("explode");
+      setShowCelebration(true);
+    }
   }
 
   // ── Realtime ─────────────────────────────────────────────────────────────
@@ -598,6 +672,20 @@ export default function App() {
       const next = { ...playResults, [key]: result };
       setPlayResults(next);
       recomputeRecord(next);
+    }
+    // Refresh all-time record
+    const { data: allResultsRows } = await supabase
+      .from("group_results")
+      .select("result")
+      .not("key", "like", "__odds_cache__%");
+    if (allResultsRows) {
+      const atRec = { wins: 0, losses: 0, pushes: 0 };
+      allResultsRows.forEach(row => {
+        if (row.result === "win") atRec.wins++;
+        else if (row.result === "loss") atRec.losses++;
+        else if (row.result === "push") atRec.pushes++;
+      });
+      setAllTimeRecord(atRec);
     }
   }
 
@@ -750,7 +838,7 @@ export default function App() {
 
   if (!session) return (
     <div style={{ minHeight: "100vh", background: "#0d0b1e", fontFamily: "Outfit, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <style>{CSS}</style>
+      <style>{CSS}{CELEBRATION_CSS}</style>
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
       <div className="glass-card pop" style={{ borderRadius: 24, padding: "40px 32px", width: "100%", maxWidth: 380, position: "relative", zIndex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
@@ -793,6 +881,95 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#0d0b1e", fontFamily: "Outfit, sans-serif", paddingBottom: page==="picks" && !hasSubmitted ? 100 : 0 }}>
       <style>{CSS}</style>
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
+
+
+      {/* ── WIN CELEBRATION ── */}
+      {showCelebration && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: celebrationPhase === "explode" ? "rgba(0,0,0,0.95)" : "rgba(0,0,0,0.85)", cursor: "pointer" }} onClick={() => setShowCelebration(false)}>
+
+          {celebrationPhase === "explode" && <>
+            {/* Flash */}
+            <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #fff 0%, #ffdd00 30%, transparent 70%)", animation: "flash 0.8s ease-out forwards", pointerEvents: "none" }} />
+
+            {/* Shockwaves */}
+            <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "4px solid rgba(255,180,0,0.8)", animation: "shockwave 1.2s ease-out 0.1s forwards", pointerEvents: "none" }} />
+            <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "8px solid rgba(255,100,0,0.6)", animation: "shockwave2 1.6s ease-out 0.2s forwards", pointerEvents: "none" }} />
+            <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.5)", animation: "shockwave 2s ease-out 0.4s forwards", pointerEvents: "none" }} />
+
+            {/* Fireball core */}
+            <div style={{ position: "absolute", width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, #fff 0%, #ffdd00 25%, #ff6600 55%, #cc2200 80%, transparent 100%)", animation: "fireball 1.4s ease-out forwards", boxShadow: "0 0 60px 30px rgba(255,100,0,0.6), 0 0 120px 60px rgba(255,50,0,0.3)", pointerEvents: "none" }} />
+
+            {/* Debris particles */}
+            {[...Array(18)].map((_, i) => {
+              const angle = (i / 18) * 360;
+              const dist = 120 + Math.random() * 180;
+              const dx = Math.cos(angle * Math.PI / 180) * dist;
+              const dy = Math.sin(angle * Math.PI / 180) * dist;
+              const size = 4 + Math.random() * 8;
+              const colors = ["#ffdd00","#ff6600","#ff3300","#ffaa00","#ffffff"];
+              const color = colors[i % colors.length];
+              const delay = Math.random() * 0.3;
+              return (
+                <div key={i} style={{
+                  position: "absolute", width: size, height: size,
+                  borderRadius: Math.random() > 0.5 ? "50%" : "2px",
+                  background: color,
+                  "--dx": `${dx}px`, "--dy": `${dy}px`,
+                  "--rot": `${Math.random() * 720 - 360}deg`,
+                  animation: `debris 1.2s ease-out ${delay}s forwards`,
+                  boxShadow: `0 0 ${size}px ${color}`,
+                  pointerEvents: "none"
+                }} />
+              );
+            })}
+
+            {/* Mushroom stem */}
+            <div style={{ position: "absolute", bottom: "30%", width: 40, height: 120, background: "linear-gradient(to top, rgba(255,100,0,0.9), rgba(255,200,50,0.6))", borderRadius: "4px 4px 0 0", transformOrigin: "bottom", animation: "mushroom-stem 1.8s ease-out 0.3s forwards", transform: "scaleY(0)", pointerEvents: "none" }} />
+
+            {/* Mushroom cap */}
+            <div style={{ position: "absolute", bottom: "calc(30% + 110px)", width: 140, height: 80, background: "radial-gradient(ellipse, rgba(255,180,0,0.95) 0%, rgba(255,80,0,0.8) 60%, transparent 100%)", borderRadius: "50% 50% 20% 20%", animation: "mushroom-cap 1.8s ease-out 0.3s forwards", transform: "scale(0)", pointerEvents: "none" }} />
+
+
+          </>}
+
+          {celebrationPhase === "settle" && <>
+            {/* Confetti */}
+            {[...Array(30)].map((_, i) => {
+              const colors = ["#ffdd00","#1E90FF","#4ade80","#f87171","#fff","#fb923c"];
+              return (
+                <div key={i} style={{
+                  position: "absolute",
+                  top: `-${Math.random() * 20}px`,
+                  left: `${Math.random() * 100}%`,
+                  width: `${4 + Math.random() * 8}px`,
+                  height: `${8 + Math.random() * 12}px`,
+                  background: colors[i % colors.length],
+                  borderRadius: "2px",
+                  animation: `confetti-fall ${1.5 + Math.random() * 2}s ease-in ${Math.random() * 0.8}s forwards`,
+                  pointerEvents: "none"
+                }} />
+              );
+            })}
+
+            {/* Win cards */}
+            <div style={{ animation: "celebration-text 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards", textAlign: "center", padding: "0 24px", maxWidth: 420, width: "100%" }}>
+              <div style={{ fontSize: 64, marginBottom: 8, filter: "drop-shadow(0 0 20px rgba(255,220,0,0.8))" }}>💥</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: "#ffdd00", letterSpacing: -1, textShadow: "0 0 30px rgba(255,220,0,0.6)", marginBottom: 6 }}>
+                {celebrationWins.length === 1 ? "WINNER!" : `${celebrationWins.length} WINNERS!`}
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 20 }}>Group play{celebrationWins.length > 1 ? "s" : ""} graded</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {celebrationWins.map((w, i) => (
+                  <div key={w.key} style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.5)", borderRadius: 14, padding: "14px 20px", animation: `settle-in 0.4s ease ${i * 0.1}s both`, boxShadow: "0 0 20px rgba(74,222,128,0.2)" }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#4ade80" }}>✓ {w.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 24, fontSize: 12, color: "rgba(255,255,255,0.2)" }}>Tap anywhere to continue</div>
+            </div>
+          </>}
+        </div>
+      )}
 
       {/* ── PLAYER MODAL ── */}
       {viewingPlayer && (
@@ -1023,38 +1200,77 @@ export default function App() {
               const winW = total > 0 ? (record.wins / total) * 100 : 0;
               const lossW = total > 0 ? (record.losses / total) * 100 : 0;
               const pushW = total > 0 ? (record.pushes / total) * 100 : 0;
+              const atTotal = allTimeRecord.wins + allTimeRecord.losses + allTimeRecord.pushes;
+              const atPct = atTotal > 0 ? Math.round((allTimeRecord.wins / (allTimeRecord.wins + allTimeRecord.losses || 1)) * 100) : null;
               return (
                 <div className="glass-card" style={{ borderRadius: 16, padding: "18px 20px", marginBottom: 20 }}>
+                  {/* Today */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>Group Play Record</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>Today</div>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                         <span style={{ fontSize: 28, fontWeight: 800, color: "#fff", letterSpacing: -1 }}>{record.wins}-{record.losses}{record.pushes>0?`-${record.pushes}`:""}</span>
                         {pct !== null && <span style={{ fontSize: 13, fontWeight: 600, color: record.wins>record.losses?"#86efac":record.losses>record.wins?"#fca5a5":"rgba(255,255,255,0.4)" }}>{pct}%</span>}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 12, textAlign: "center" }}>
+                    <div style={{ display: "flex", gap: 8, textAlign: "center" }}>
                       {[["W",record.wins,"#86efac","rgba(134,239,172,0.15)"],["L",record.losses,"#fca5a5","rgba(252,165,165,0.15)"],["P",record.pushes,"rgba(255,255,255,0.4)","rgba(255,255,255,0.06)"]].map(([lbl,val,color,bg]) => (
-                        <div key={lbl} style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 10, padding: "8px 14px", minWidth: 44 }}>
+                        <div key={lbl} style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 10, padding: "8px 12px", minWidth: 40 }}>
                           <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1 }}>{val}</div>
                           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, marginTop: 3 }}>{lbl}</div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden", display: "flex" }}>
+                  <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden", display: "flex", marginBottom: 16 }}>
                     {total > 0 && <>
                       <div style={{ width: `${winW}%`, background: "linear-gradient(90deg, #4ade80, #86efac)", transition: "width 0.4s ease" }} />
                       <div style={{ width: `${pushW}%`, background: "rgba(255,255,255,0.2)", transition: "width 0.4s ease" }} />
                       <div style={{ width: `${lossW}%`, background: "linear-gradient(90deg, #f87171, #fca5a5)", transition: "width 0.4s ease" }} />
                     </>}
                   </div>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 8 }}>
+
+                  {/* All-time */}
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3 }}>All Time</div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.6)", letterSpacing: -0.5 }}>{allTimeRecord.wins}-{allTimeRecord.losses}{allTimeRecord.pushes>0?`-${allTimeRecord.pushes}`:""}</span>
+                          {atPct !== null && <span style={{ fontSize: 12, fontWeight: 600, color: allTimeRecord.wins>allTimeRecord.losses?"rgba(134,239,172,0.7)":allTimeRecord.losses>allTimeRecord.wins?"rgba(252,165,165,0.7)":"rgba(255,255,255,0.3)" }}>{atPct}%</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", textAlign: "right" }}>
+                        {atTotal} graded play{atTotal !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 12 }}>
                     {isAdmin ? "Tap W / L / P on each play to grade results" : "Results graded by admin after games finish"}
                   </div>
                 </div>
               );
             })()}
+
+            {/* Admin: refresh odds */}
+            {isAdmin && (
+              <div className="glass-card" style={{ borderRadius: 16, padding: "14px 20px", marginBottom: 14, border: "1px solid rgba(245,158,11,0.2)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#fbbf24" }}>⚡ Refresh Today's Odds</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>Pulls fresh lines from the API and updates the slate for everyone</div>
+                </div>
+                <button onClick={() => {
+                  const ungradedCount = allPlays.filter(([key]) => !playResults[key]).length;
+                  const msg = ungradedCount > 0
+                    ? `⚠️ You have ${ungradedCount} ungraded play${ungradedCount !== 1 ? "s" : ""}. Grade them before refreshing or they'll be lost. Refresh anyway?`
+                    : "No ungraded plays. Refresh today's odds?";
+                  if (window.confirm(msg)) fetchOdds();
+                }} disabled={oddsLoading} style={{ padding: "8px 18px", background: oddsLoading ? "rgba(255,255,255,0.06)" : "rgba(245,158,11,0.2)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 10, color: oddsLoading ? "rgba(255,255,255,0.2)" : "#fbbf24", fontSize: 12, fontWeight: 700, cursor: oddsLoading ? "not-allowed" : "pointer", fontFamily: "Outfit, sans-serif", whiteSpace: "nowrap" }}>
+                  {oddsLoading ? "Fetching..." : "Refresh"}
+                </button>
+              </div>
+            )}
 
             {/* Admin: manage pickers */}
             {isAdmin && submitters.length > 0 && (
