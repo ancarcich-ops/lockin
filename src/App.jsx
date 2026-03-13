@@ -132,6 +132,7 @@ function PlayerModal({ player, allPicks, games, onClose }) {
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
                   {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
+                  {stored?.note && <div style={{ fontSize: 11, color: "rgba(250,204,21,0.7)", marginTop: 4, fontStyle: "italic" }}>"{stored.note}"</div>}
                 </div>
               </div>
             );
@@ -214,10 +215,11 @@ export default function App() {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [celebrationWins, setCelebrationWins] = useState([]); // plays to celebrate
   const [showCelebration, setShowCelebration] = useState(false);
+  const [pickNotes, setPickNotes] = useState({}); // { [key]: noteText }
   const [celebrationPhase, setCelebrationPhase] = useState("explode"); // explode | settle
 
   // App
-  const [page, setPage]                     = useState("picks");
+  const [page, setPage]                     = useState("group");
   const [viewingPlayer, setViewingPlayer]   = useState(null); // username string or null
   const [games, setGames]                   = useState(SAMPLE_GAMES);
   const [oddsLoading, setOddsLoading]       = useState(false);
@@ -326,7 +328,7 @@ export default function App() {
   async function switchAccount(acct) {
     setShowAccountMenu(false);
     await supabase.auth.signOut();
-    setMyPicks(null); setSelectedPicks({}); setPage("picks"); setIsAdmin(false);
+    setMyPicks(null); setSelectedPicks({}); setPage("group"); setIsAdmin(false);
     setAuthWorking(true);
     const fakeEmail = `${acct.username.toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
     const { error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: acct.password });
@@ -635,7 +637,8 @@ export default function App() {
         ml_away:     (g) => ({ label: g.away,  line: `ML ${g.ml.away}`, matchup: `${g.away} @ ${g.home}` }),
         ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}`, matchup: `${g.away} @ ${g.home}` }),
       };
-      enriched[key] = game ? BT[bt]?.(game) || true : true;
+      const base = game ? BT[bt]?.(game) || {} : {};
+      enriched[key] = { ...base, ...(pickNotes[key] ? { note: pickNotes[key].trim() } : {}) };
     });
     const payload = {
       username,
@@ -646,6 +649,7 @@ export default function App() {
     };
     const { error } = await supabase.from("picks").upsert(payload, { onConflict: "username,date" });
     if (!error) {
+      setPickNotes({});
       setMyPicks({ selections: enriched, is_public: isPublic });
       setAllPicks(prev => ({
         ...prev,
@@ -794,6 +798,13 @@ export default function App() {
               <span key={p} onClick={() => onPlayerClick && onPlayerClick(p)} style={{ background: dimmed ? "rgba(255,255,255,0.07)" : "rgba(30,144,255,0.18)", border: `1px solid ${dimmed ? "rgba(255,255,255,0.12)" : "rgba(30,144,255,0.35)"}`, borderRadius: 20, padding: "4px 13px", fontSize: 11, color: dimmed ? "rgba(255,255,255,0.4)" : "#bae6fd", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}>{p}</span>
             ))}
           </div>
+          {/* Notes from players on this play */}
+          {people.filter(p => allPicks[p]?.selections?.[playKey]?.note).map(p => (
+            <div key={p} style={{ marginBottom: 6, padding: "7px 12px", background: "rgba(250,204,21,0.06)", border: "1px solid rgba(250,204,21,0.15)", borderRadius: 10, display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 11, color: "rgba(250,204,21,0.5)", fontWeight: 600, whiteSpace: "nowrap" }}>{p}:</span>
+              <span style={{ fontSize: 11, color: "rgba(250,204,21,0.75)", fontStyle: "italic" }}>"{allPicks[p].selections[playKey].note}"</span>
+            </div>
+          ))}
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: 1, textTransform: "uppercase", marginRight: 4 }}>Result:</span>
             {isAdmin ? (
@@ -1090,8 +1101,9 @@ export default function App() {
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>
                         {Object.keys(myPicks.selections).length} play{Object.keys(myPicks.selections).length!==1?"s":""} · {myPicks.is_public ? "🌐 Public" : "🔒 Private"}
                       </div>
+                      <div style={{ fontSize: 11, color: "rgba(30,144,255,0.65)", marginTop: 5 }}>Want to add or change picks? Hit Edit</div>
                     </div>
-                    <button onClick={() => setMyPicks(null)} style={{ padding: "7px 14px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>Edit</button>
+                    <button onClick={() => setMyPicks(null)} style={{ padding: "8px 18px", background: "rgba(30,144,255,0.2)", border: "1px solid rgba(30,144,255,0.45)", borderRadius: 10, color: "#7dd3fc", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>Edit</button>
                   </div>
                 </div>
 
@@ -1107,12 +1119,12 @@ export default function App() {
                     const game = games.find(g => g.id === gid);
                     return game ? `${game.away} @ ${game.home}` : null;
                   })();
+                  const note = stored?.note || null;
                   return (
-                    <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
-                        {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
-                      </div>
+                    <div key={key} style={{ padding: "10px 16px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
+                      {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
+                      {note && <div style={{ fontSize: 11, color: "rgba(250,204,21,0.7)", marginTop: 4, fontStyle: "italic" }}>"{note}"</div>}
                     </div>
                   );
                 })}
@@ -1168,6 +1180,26 @@ export default function App() {
                               </div>
                             </div>
                           ))}
+                          {/* Note field — only show if this game has an active pick */}
+                          {(() => {
+                            const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
+                              .map(bt => `${game.id}__${bt}`)
+                              .find(k => selectedPicks[k]);
+                            if (!activeKey) return null;
+                            return (
+                              <div style={{ marginTop: 4 }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "rgba(255,255,255,0.15)" }}>(optional)</span></div>
+                                <input
+                                  type="text"
+                                  maxLength={80}
+                                  placeholder="e.g. got -3 instead of -3.5"
+                                  value={pickNotes[activeKey] || ""}
+                                  onChange={e => setPickNotes(prev => ({ ...prev, [activeKey]: e.target.value }))}
+                                  style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
+                                />
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -1188,6 +1220,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Group Plays</div>
                   <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>Plays where 2 or more people agree</div>
+                  {!hasSubmitted && <div style={{ fontSize: 12, color: "rgba(30,144,255,0.7)", marginTop: 6 }}>👈 Head to My Picks to add your plays</div>}
                 </div>
                 {isAdmin && <div style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 10, padding: "6px 12px", fontSize: 11, color: "#fbbf24", fontWeight: 600 }}>⚡ Admin</div>}
               </div>
