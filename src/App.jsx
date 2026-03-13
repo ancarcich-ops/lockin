@@ -221,7 +221,7 @@ export default function App() {
   // App
   const [page, setPage]                     = useState("group");
   const [viewingPlayer, setViewingPlayer]   = useState(null); // username string or null
-  const [games, setGames]                   = useState(SAMPLE_GAMES);
+  const [games, setGames]                   = useState([]); // empty until cache loads
   const [oddsLoading, setOddsLoading]       = useState(false);
   const [oddsError, setOddsError]           = useState(null);
   const [allPicks, setAllPicks]             = useState({});   // { username: { selections, is_public } }
@@ -1134,11 +1134,20 @@ export default function App() {
             {/* Pick entry form */}
             {!hasSubmitted && (
               <>
-                <div style={{ position: "relative", marginBottom: 16 }}>
+                {games.length === 0 && !oddsLoading && (
+                  <div style={{ textAlign: "center", padding: "40px 20px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16 }}>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>🕐</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.7)", marginBottom: 8 }}>Lines aren't up yet for today</div>
+                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+                      When you get a chance, could you let the admin know<br />so they can refresh the odds? Thanks! 🙏
+                    </div>
+                  </div>
+                )}
+                {games.length > 0 && <div style={{ position: "relative", marginBottom: 16 }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 15, color: "rgba(255,255,255,0.25)", pointerEvents: "none" }}>🔍</div>
                   <input className="glass-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search teams..." style={{ width: "100%", borderRadius: 12, padding: "11px 14px 11px 40px", color: "#fff", fontSize: 13, fontFamily: "Outfit, sans-serif", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }} />
                   {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>}
-                </div>
+                </div>}
 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                   <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.4))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "#bae6fd", textTransform: "uppercase" }}>NCAAB</span>
@@ -1206,6 +1215,7 @@ export default function App() {
                   );
                 })}
                 <div style={{ height: 16 }} />
+                }
               </>
             )}
           </div>
