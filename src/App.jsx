@@ -577,6 +577,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("lockin_accounts") || "[]"); } catch { return []; }
   });
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [viewerMode, setViewerMode] = useState(false);
   const [celebrationWins, setCelebrationWins] = useState([]); // plays to celebrate
   const [showCelebration, setShowCelebration] = useState(false);
   const [pickNotes, setPickNotes] = useState({}); // { [key]: noteText }
@@ -800,9 +801,10 @@ export default function App() {
 
   // ── Load data ────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (viewerMode) { loadData(null); return; }
     if (!session || !username) return;
     loadData(username);
-  }, [session, username]);
+  }, [session, username, viewerMode]);
 
   async function loadData(activeUsername) {
     const uname = activeUsername || username;
@@ -1219,7 +1221,7 @@ export default function App() {
     </div>
   );
 
-  if (!session) return (
+  if (!session && !viewerMode) return (
     <div style={{ minHeight: "100vh", background: "#0d0b1e", fontFamily: "Outfit, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}{CELEBRATION_CSS}</style>
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
@@ -1249,6 +1251,13 @@ export default function App() {
         <button onClick={authMode==="login"?handleLogin:handleSignup} disabled={authWorking} style={{ width: "100%", marginTop: 18, padding: "14px", background: authWorking?"rgba(255,255,255,0.08)":"linear-gradient(135deg, #1E90FF, #0ea5e9)", border: "none", borderRadius: 12, color: authWorking?"rgba(255,255,255,0.3)":"#fff", fontSize: 14, fontWeight: 700, cursor: authWorking?"not-allowed":"pointer", fontFamily: "Outfit, sans-serif", boxShadow: authWorking?"none":"0 4px 20px rgba(30,144,255,0.4)" }}>
           {authWorking ? "..." : authMode==="login" ? "Log In" : "Create Account"}
         </button>
+
+        <div style={{ marginTop: 16, textAlign: "center" }}>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", marginBottom: 16 }} />
+          <button onClick={() => { setViewerMode(true); setPage("group"); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
+            👀 Watch without an account
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1295,32 +1304,36 @@ export default function App() {
 
       {/* ── NAV ── */}
       <div className="glass-nav" style={{ position: "sticky", top: 0, zIndex: 200 }}>
-        <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 22px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div className="logo-btn" onClick={handleLogoTap} style={{ display: "flex", alignItems: "center", gap: 11 }}>
-            <div style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s" }}>
-              <LogoIcon isAdmin={isAdmin} size={36} />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", letterSpacing: -0.3 }}>Lock In</div>
-              <div style={{ fontSize: 9, color: isAdmin?"rgba(251,191,36,0.7)":"rgba(255,255,255,0.3)", letterSpacing: 0.8, marginTop: 1 }}>{isAdmin ? "ADMIN MODE" : new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Los_Angeles" })}</div>
+        <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 14px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div className="logo-btn" onClick={handleLogoTap} style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <LogoIcon isAdmin={isAdmin} size={30} />
+            <div style={{ lineHeight: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: -0.3, whiteSpace: "nowrap" }}>Lock In</div>
+              {isAdmin && <div style={{ fontSize: 8, color: "rgba(251,191,36,0.7)", letterSpacing: 0.8, marginTop: 2 }}>ADMIN</div>}
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "4px", gap: 3, border: "1px solid rgba(255,255,255,0.07)" }}>
-              {[["picks","My Picks"],["group","Group Plays"],["players","Players"]].map(([p, label]) => (
-                <button key={p} className="nav-btn" onClick={() => setPage(p)} style={{ padding: "8px 14px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 9, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 12, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", letterSpacing: 0.1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "3px", gap: 2, border: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+              {[["picks","Picks"],["group","Group"],["players","Players"]].filter(([p]) => !viewerMode || p !== "picks").map(([p, label]) => (
+                <button key={p} className="nav-btn" onClick={() => setPage(p)} style={{ padding: "7px 10px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 8, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 11, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", whiteSpace: "nowrap" }}>
                   {label}
-                  {p==="group" && groupPlays.length>0 && <span style={{ position: "absolute", top: 5, right: 5, width: 7, height: 7, background: "#0ea5e9", borderRadius: "50%", boxShadow: "0 0 8px #0ea5e9" }} />}
+                  {p==="group" && groupPlays.length>0 && <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, background: "#0ea5e9", borderRadius: "50%", boxShadow: "0 0 6px #0ea5e9" }} />}
                 </button>
               ))}
             </div>
-            {/* Account switcher */}
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 20, padding: "5px 12px 5px 14px", cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#bae6fd" }}>{username}</span>
-                <span style={{ fontSize: 9, color: "rgba(186,230,253,0.5)", marginTop: 1 }}>▾</span>
+            {/* Account switcher / sign in */}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {viewerMode ? (
+                <button onClick={() => setViewerMode(false)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(30,144,255,0.2)", border: "1px solid rgba(30,144,255,0.5)", borderRadius: 16, padding: "5px 12px", cursor: "pointer", fontFamily: "Outfit, sans-serif", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#bae6fd" }}>Sign In</span>
+                </button>
+              ) : (
+              <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 10px 5px 10px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 110 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#bae6fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{username}</span>
+                <span style={{ fontSize: 8, color: "rgba(186,230,253,0.5)", flexShrink: 0 }}>▾</span>
               </button>
+              )}
               {showAccountMenu && (
                 <div className="glass-card pop" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", borderRadius: 14, minWidth: 180, padding: "8px", zIndex: 300, border: "1px solid rgba(30,144,255,0.25)" }} onClick={e => e.stopPropagation()}>
                   {savedAccounts.filter(a => a.username !== username).length > 0 && (
@@ -1344,6 +1357,7 @@ export default function App() {
                 </div>
               )}
               {showAccountMenu && <div style={{ position: "fixed", inset: 0, zIndex: 299 }} onClick={() => setShowAccountMenu(false)} />}
+              )}
             </div>
           </div>
         </div>
@@ -1366,7 +1380,17 @@ export default function App() {
       <div style={{ maxWidth: 660, margin: "0 auto", padding: "24px 22px", position: "relative", zIndex: 1 }}>
 
         {/* ═══ MY PICKS PAGE ═══ */}
-        {page === "picks" && (
+        {page === "picks" && viewerMode && (
+          <div className="fade-up" style={{ padding: "0 0 40px" }}>
+            <div className="glass-card" style={{ borderRadius: 20, padding: "40px 28px", textAlign: "center", margin: "0 0 16px" }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 8 }}>Sign in to file picks</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginBottom: 24, lineHeight: 1.6 }}>You're watching as a guest. Create a free account to submit your picks and join the group.</div>
+              <button onClick={() => setViewerMode(false)} style={{ padding: "13px 32px", background: "linear-gradient(135deg, #1E90FF, #0ea5e9)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif", boxShadow: "0 4px 20px rgba(30,144,255,0.4)" }}>Sign In / Create Account</button>
+            </div>
+          </div>
+        )}
+        {page === "picks" && !viewerMode && (
           <div className="fade-up">
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 16 }}>{TODAY_LABEL}</div>
 
