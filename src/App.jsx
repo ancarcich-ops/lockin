@@ -1326,8 +1326,8 @@ export default function App() {
         if (rowsWithIds.length > 0) {
           const { error: histErr } = await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
           if (histErr) console.error("[LockIn] pick_history upsert error:", histErr.message);
-          else console.log("[LockIn] pick_history upsert OK for", rowsWithIds.length, "rows");
           else {
+            console.log("[LockIn] pick_history upsert OK for", rowsWithIds.length, "rows");
             // Refresh profile history if it's currently open
             if (showProfile) {
               const viewingUser = profileUser || username;
