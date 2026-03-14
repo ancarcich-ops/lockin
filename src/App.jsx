@@ -480,11 +480,11 @@ export default function App() {
       checkForNewWins(built, allGames.length > 0 ? allGames : games);
     }
 
-    // Load all-time record — only rows with an actual result (excludes odds cache rows which have null result)
+    // Load all-time record — only rows with graded results
     const { data: allResultsRows } = await supabase
       .from("group_results")
       .select("result")
-      .not("result", "is", null);
+      .in("result", ["win", "loss", "push"]);
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
@@ -689,7 +689,7 @@ export default function App() {
     const { data: allResultsRows } = await supabase
       .from("group_results")
       .select("result")
-      .not("result", "is", null);
+      .in("result", ["win", "loss", "push"]);
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
