@@ -986,8 +986,8 @@ export default function App() {
       const built = {};
       let mine = null;
       picksRows.forEach(row => {
-        // Include all picks for group play tallying; is_public flag controls UI display
-        built[row.username] = { selections: row.selections, is_public: row.is_public };
+        // Always include all picks — is_public flag controls UI display only
+        built[row.username] = { selections: row.selections, is_public: row.is_public, user_id: row.user_id };
         if (row.username === uname) mine = row;
       });
       setAllPicks(built);
@@ -1158,13 +1158,11 @@ export default function App() {
     if (!session) return;
     const picksSub = supabase.channel("picks-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
-        supabase.from("picks").select("username, selections, is_public").eq("date", TODAY_DATE).then(({ data }) => {
+        supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE).then(({ data }) => {
           if (data) {
             const built = {};
             data.forEach(row => {
-              if (row.username === username || row.is_public) {
-                built[row.username] = { selections: row.selections, is_public: row.is_public };
-              }
+              built[row.username] = { selections: row.selections, is_public: row.is_public, user_id: row.user_id };
             });
             setAllPicks(built);
           }
@@ -1315,15 +1313,15 @@ export default function App() {
         }
       });
 
-      // Resolve user_ids from profiles table then upsert
+      // Use user_id already stored in allPicks (from picks table)
       if (historyRows.length > 0) {
-        const usernames = historyRows.map(r => r.username);
-        const { data: profiles } = await supabase.from("profiles").select("id, username").in("username", usernames);
-        const idMap = {};
-        profiles?.forEach(p => { idMap[p.username] = p.id; });
-        const rowsWithIds = historyRows.map(r => ({ ...r, user_id: idMap[r.username] || null })).filter(r => r.user_id);
+        const rowsWithIds = historyRows.map(r => ({
+          ...r,
+          user_id: allPicks[r.username]?.user_id || r.user_id || null
+        })).filter(r => r.user_id);
         if (rowsWithIds.length > 0) {
-          await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
+          const { error: histErr } = await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
+          if (histErr) console.error("[LockIn] pick_history upsert error:", histErr.message);
         }
       }
     }
