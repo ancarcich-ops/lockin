@@ -1035,34 +1035,53 @@ export default function App() {
 
   async function loadPickHistory(uname) {
     setHistoryLoading(true);
+    // Load history
     const { data } = await supabase
       .from("pick_history")
       .select("*")
       .eq("username", uname)
       .order("date", { ascending: false });
     if (data) setPickHistory(data);
-    // Also get own public setting
-    const first = data?.[0];
-    if (first) setProfilePublic(first.is_public);
+    // Load public setting from profiles table (source of truth)
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_public")
+      .eq("username", uname)
+      .maybeSingle();
+    setProfilePublic(profile?.is_public ?? false);
     setHistoryLoading(false);
   }
 
   async function loadProfileHistory(uname) {
     setHistoryLoading(true);
-    const { data } = await supabase
-      .from("pick_history")
-      .select("*")
+    // Check if profile is public from profiles table
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_public")
       .eq("username", uname)
-      .eq("is_public", true)
-      .order("date", { ascending: false });
-    // If no public rows, profile is private
-    setProfilePublic(data && data.length > 0);
-    if (data) setProfileHistory(data);
+      .maybeSingle();
+    const isPublic = profile?.is_public ?? false;
+    setProfilePublic(isPublic);
+    if (isPublic) {
+      const { data } = await supabase
+        .from("pick_history")
+        .select("*")
+        .eq("username", uname)
+        .order("date", { ascending: false });
+      if (data) setProfileHistory(data);
+    } else {
+      setProfileHistory([]);
+    }
     setHistoryLoading(false);
   }
 
   async function toggleProfilePublic(isNowPublic) {
     setProfilePublic(isNowPublic);
+    // Update profiles table (source of truth for visibility)
+    await supabase.from("profiles")
+      .update({ is_public: isNowPublic })
+      .eq("username", username);
+    // Also sync to pick_history rows so RLS works correctly
     await supabase.from("pick_history")
       .update({ is_public: isNowPublic })
       .eq("username", username);
