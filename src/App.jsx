@@ -480,11 +480,11 @@ export default function App() {
       checkForNewWins(built, allGames.length > 0 ? allGames : games);
     }
 
-    // Load all-time record across all dates
+    // Load all-time record — only rows with an actual result (excludes odds cache rows which have null result)
     const { data: allResultsRows } = await supabase
       .from("group_results")
       .select("result")
-      .not("key", "like", "__odds_cache__%");
+      .not("result", "is", null);
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
@@ -612,12 +612,20 @@ export default function App() {
   );
 
   function togglePick(gameId, betType) {
+    const key = `${gameId}__${betType}`;
+    const oppKey = `${gameId}__${OPPOSITES[betType]}`;
     setSelectedPicks(prev => {
-      const key = `${gameId}__${betType}`;
-      const oppKey = `${gameId}__${OPPOSITES[betType]}`;
       const next = { ...prev };
       delete next[oppKey];
       if (next[key]) delete next[key]; else next[key] = true;
+      return next;
+    });
+    // Clean up notes for removed keys so they don't bleed into other picks
+    setPickNotes(prev => {
+      const next = { ...prev };
+      delete next[oppKey]; // always remove the opposite's note
+      // if toggling off, also remove this key's note
+      if (selectedPicks[key]) delete next[key];
       return next;
     });
   }
@@ -681,7 +689,7 @@ export default function App() {
     const { data: allResultsRows } = await supabase
       .from("group_results")
       .select("result")
-      .not("key", "like", "__odds_cache__%");
+      .not("result", "is", null);
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
@@ -1275,7 +1283,7 @@ export default function App() {
 
                   {/* All-time */}
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3 }}>All Time</div>
                         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
@@ -1283,9 +1291,24 @@ export default function App() {
                           {atPct !== null && <span style={{ fontSize: 12, fontWeight: 600, color: allTimeRecord.wins>allTimeRecord.losses?"rgba(134,239,172,0.7)":allTimeRecord.losses>allTimeRecord.wins?"rgba(252,165,165,0.7)":"rgba(255,255,255,0.3)" }}>{atPct}%</span>}
                         </div>
                       </div>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", textAlign: "right" }}>
-                        {atTotal} graded play{atTotal !== 1 ? "s" : ""}
+                      <div style={{ display: "flex", gap: 6, textAlign: "center" }}>
+                        {[["W",allTimeRecord.wins,"rgba(134,239,172,0.8)","rgba(134,239,172,0.1)"],["L",allTimeRecord.losses,"rgba(252,165,165,0.8)","rgba(252,165,165,0.1)"],["P",allTimeRecord.pushes,"rgba(255,255,255,0.3)","rgba(255,255,255,0.05)"]].map(([lbl,val,color,bg]) => (
+                          <div key={lbl} style={{ background: bg, border: `1px solid ${color}50`, borderRadius: 8, padding: "5px 10px", minWidth: 34, textAlign: "center" }}>
+                            <div style={{ fontSize: 14, fontWeight: 800, color, lineHeight: 1 }}>{val}</div>
+                            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, marginTop: 2 }}>{lbl}</div>
+                          </div>
+                        ))}
                       </div>
+                    </div>
+                    {atTotal > 0 && (
+                      <div style={{ height: 4, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden", display: "flex" }}>
+                        <div style={{ width: `${(allTimeRecord.wins/atTotal)*100}%`, background: "linear-gradient(90deg, #4ade80, #86efac)", transition: "width 0.4s ease" }} />
+                        <div style={{ width: `${(allTimeRecord.pushes/atTotal)*100}%`, background: "rgba(255,255,255,0.2)", transition: "width 0.4s ease" }} />
+                        <div style={{ width: `${(allTimeRecord.losses/atTotal)*100}%`, background: "linear-gradient(90deg, #f87171, #fca5a5)", transition: "width 0.4s ease" }} />
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", marginTop: 6 }}>
+                      {atTotal} graded play{atTotal !== 1 ? "s" : ""}
                     </div>
                   </div>
 
