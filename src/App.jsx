@@ -918,18 +918,36 @@ export default function App() {
       .filter(([key, result]) => result === "win" && !seen.has(key) && !key.startsWith("__"))
       .map(([key]) => {
         const [gid, bt] = key.split("__");
-        const game = currentGames.find(g => g.id === gid);
-        const label = game ? (() => {
-          const BT = {
-            spread_away: (g) => `${g.away} ${g.spread.away}`,
-            spread_home: (g) => `${g.home} ${g.spread.home}`,
-            over: (g) => `Over ${g.total}`,
-            under: (g) => `Under ${g.total}`,
-            ml_away: (g) => `${g.away} ML`,
-            ml_home: (g) => `${g.home} ML`,
-          };
-          return BT[bt]?.(game) || key;
-        })() : key;
+
+        // First try to get label from stored picks (most reliable — saved at submit time)
+        let label = null;
+        const allPicksEntries = Object.values(allPicks);
+        for (const p of allPicksEntries) {
+          const stored = p.selections?.[key];
+          if (stored?.label) {
+            label = `${stored.label} ${stored.line}`;
+            break;
+          }
+        }
+
+        // Fall back to live game lookup
+        if (!label) {
+          const game = currentGames.find(g => g.id === gid);
+          if (game) {
+            const BT = {
+              spread_away: (g) => `${g.away} ${g.spread.away}`,
+              spread_home: (g) => `${g.home} ${g.spread.home}`,
+              over: (g) => `Over ${g.total}`,
+              under: (g) => `Under ${g.total}`,
+              ml_away: (g) => `${g.away} ML`,
+              ml_home: (g) => `${g.home} ML`,
+            };
+            label = BT[bt]?.(game) || key;
+          } else {
+            label = key;
+          }
+        }
+
         return { key, label };
       });
     if (newWins.length > 0 && !isAdmin) {
