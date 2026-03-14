@@ -425,6 +425,129 @@ function LogoIcon({ isAdmin, size = 32 }) {
 }
 
 
+// ─── RECORD DETAIL MODAL ──────────────────────────────────────────────────────
+function RecordDetailModal({ scope, allPicks, playResults, games, onClose }) {
+  // Build breakdown by agreement level using pick_history + group_results
+  // We reconstruct from allPlays logic: for each graded result, count how many people agreed
+  const getLabel = (key) => {
+    const [gid, bt] = key.split("__");
+    const g = games.find(x => x.id === gid);
+    if (!g) return key;
+    const BT = {
+      spread_away: (g) => `${g.away} ${g.spread.away}`,
+      spread_home: (g) => `${g.home} ${g.spread.home}`,
+      over: (g) => `Over ${g.total}`,
+      under: (g) => `Under ${g.total}`,
+      ml_away: (g) => `${g.away} ML`,
+      ml_home: (g) => `${g.home} ML`,
+    };
+    return BT[bt]?.(g) || key;
+  };
+
+  const OPPOSITES = {
+    spread_away:"spread_home", spread_home:"spread_away",
+    over:"under", under:"over", ml_away:"ml_home", ml_home:"ml_away"
+  };
+
+  // For each graded play, figure out how many people agreed
+  const tiers = {}; // { 2: [{key, label, result, agreers}], 3: [...], ... }
+  const gradedKeys = Object.entries(playResults).filter(([k, r]) => r && !k.startsWith("__"));
+
+  gradedKeys.forEach(([key, result]) => {
+    const oppKey = key.split("__")[0] + "__" + OPPOSITES[key.split("__")[1]];
+    const agreers = Object.values(allPicks).filter(p => p.selections?.[key]).length;
+    const dissenters = Object.values(allPicks).filter(p => p.selections?.[oppKey]).length;
+    if (agreers < 2) return; // not a group play
+
+    // Get stored label from first person who had it
+    const stored = Object.values(allPicks).find(p => p.selections?.[key])?.selections?.[key];
+    const label = stored?.label ? `${stored.label} ${stored.line}` : getLabel(key);
+
+    const tier = agreers;
+    if (!tiers[tier]) tiers[tier] = [];
+    tiers[tier].push({ key, label, result, agreers, dissenters });
+  });
+
+  // Build summary per tier
+  const tierSummary = Object.entries(tiers)
+    .map(([tier, plays]) => {
+      const wins = plays.filter(p => p.result === "win").length;
+      const losses = plays.filter(p => p.result === "loss").length;
+      const pushes = plays.filter(p => p.result === "push").length;
+      return { tier: Number(tier), plays, wins, losses, pushes };
+    })
+    .sort((a, b) => b.tier - a.tier);
+
+  const rc = (r) => r==="win"?"#4ade80":r==="loss"?"#f87171":r==="push"?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.2)";
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#0d0b1e",border:"1px solid rgba(255,255,255,0.09)",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:660,maxHeight:"88vh",overflowY:"auto",paddingBottom:32}}>
+        <div style={{display:"flex",justifyContent:"center",padding:"12px 0 0"}}>
+          <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)"}} />
+        </div>
+        <div style={{padding:"20px 24px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+            <div>
+              <div style={{fontSize:20,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>Record Breakdown</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3}}>By agreement level</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"rgba(255,255,255,0.4)",fontSize:18,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+          </div>
+
+          {tierSummary.length === 0 && (
+            <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",padding:"40px 0",fontSize:13}}>No graded plays yet</div>
+          )}
+
+          {tierSummary.map(({ tier, plays, wins, losses, pushes }) => {
+            const total = wins + losses + pushes;
+            const pct = total > 0 ? Math.round((wins / (wins + losses || 1)) * 100) : null;
+            const tierColor = tier >= 5 ? "#facc15" : tier >= 3 ? "#fb923c" : "#bae6fd";
+            return (
+              <div key={tier} style={{marginBottom:20}}>
+                {/* Tier header */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{fontSize:22,fontWeight:800,color:tierColor,lineHeight:1}}>{tier}</div>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:tierColor}}>agree{tier !== 1 ? "s" : ""}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>{total} play{total !== 1 ? "s" : ""}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                    <span style={{fontSize:22,fontWeight:800,color:"#fff"}}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</span>
+                    {pct !== null && <span style={{fontSize:12,fontWeight:600,color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)"}}>{pct}%</span>}
+                  </div>
+                </div>
+                {/* Progress bar */}
+                {total > 0 && (
+                  <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.08)",overflow:"hidden",display:"flex",marginBottom:10}}>
+                    <div style={{width:`${(wins/total)*100}%`,background:"linear-gradient(90deg,#4ade80,#86efac)",transition:"width 0.4s"}} />
+                    <div style={{width:`${(pushes/total)*100}%`,background:"rgba(255,255,255,0.2)"}} />
+                    <div style={{width:`${(losses/total)*100}%`,background:"linear-gradient(90deg,#f87171,#fca5a5)"}} />
+                  </div>
+                )}
+                {/* Individual plays */}
+                {plays.map(p => (
+                  <div key={p.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(255,255,255,0.03)",border:`1px solid rgba(255,255,255,0.06)`,borderLeft:`3px solid ${rc(p.result)}`,borderRadius:10,marginBottom:6}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"#e0f2fe"}}>{p.label}</div>
+                      {p.dissenters > 0 && <div style={{fontSize:10,color:"rgba(253,164,175,0.6)",marginTop:2}}>{p.dissenters} dissent{p.dissenters !== 1 ? "s" : ""}</div>}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:700,color:rc(p.result),background:p.result==="win"?"rgba(74,222,128,0.1)":p.result==="loss"?"rgba(248,113,113,0.1)":"rgba(255,255,255,0.06)",border:`1px solid ${rc(p.result)}40`,borderRadius:6,padding:"3px 8px"}}>
+                      {p.result ? p.result.toUpperCase() : "PENDING"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
 function ProfilePage({ username, history, loading, isOwn, profilePublic, onTogglePublic, onClose, tab, setTab }) {
   const now = new Date();
@@ -739,6 +862,8 @@ export default function App() {
   const [profilePublic, setProfilePublic]   = useState(false); // own public toggle
   const [pickUnits, setPickUnits]           = useState({}); // { [key]: units }
   const [profileTab, setProfileTab]         = useState("all"); // all|month|week|sport
+  const [showRecordDetail, setShowRecordDetail] = useState(false);
+  const [recordDetailScope, setRecordDetailScope] = useState("alltime"); // today|alltime
 
   // Admin
   const [isAdmin, setIsAdmin]               = useState(false);
@@ -1574,6 +1699,17 @@ export default function App() {
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
 
 
+      {/* ── RECORD DETAIL MODAL ── */}
+      {showRecordDetail && (
+        <RecordDetailModal
+          scope={recordDetailScope}
+          allPicks={allPicks}
+          playResults={playResults}
+          games={games}
+          onClose={() => setShowRecordDetail(false)}
+        />
+      )}
+
       {/* ── WIN CELEBRATION ── */}
       {showCelebration && <WinCelebration wins={celebrationWins} phase={celebrationPhase} onDismiss={() => setShowCelebration(false)} />}
 
@@ -1895,7 +2031,7 @@ export default function App() {
               const atTotal = allTimeRecord.wins + allTimeRecord.losses + allTimeRecord.pushes;
               const atPct = atTotal > 0 ? Math.round((allTimeRecord.wins / (allTimeRecord.wins + allTimeRecord.losses || 1)) * 100) : null;
               return (
-                <div className="glass-card" style={{ borderRadius: 16, padding: "18px 20px", marginBottom: 20 }}>
+                <div className="glass-card" style={{ borderRadius: 16, padding: "18px 20px", marginBottom: 20, cursor: "pointer" }} onClick={() => { setRecordDetailScope("today"); setShowRecordDetail(true); }}>
                   {/* Today */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                     <div>
@@ -1923,7 +2059,7 @@ export default function App() {
                   </div>
 
                   {/* All-time */}
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14 }}>
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3 }}>All Time</div>
