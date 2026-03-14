@@ -1444,8 +1444,8 @@ export default function App() {
     const label = getLabel(playKey);
     const oppLabel = getLabel(`${gid}__${OPPOSITES[bt]}`);
     const heat = !dimmed
-      ? people.length >= 4
-        ? { color: "#f87171", glow: "rgba(248,113,113,0.4)", border: "rgba(248,113,113,0.4)" }
+      ? people.length >= 5
+        ? { color: "#facc15", glow: "rgba(250,204,21,0.4)", border: "rgba(250,204,21,0.5)" }
         : people.length >= 3
         ? { color: "#fb923c", glow: "rgba(251,146,60,0.4)", border: "rgba(251,146,60,0.4)" }
         : { color: "#bae6fd", glow: "rgba(30,144,255,0.4)", border: "rgba(30,144,255,0.5)" }
