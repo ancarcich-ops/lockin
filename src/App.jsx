@@ -753,7 +753,7 @@ export default function App() {
         if (!res.ok) continue;
         const data = await res.json();
         const todayGames = data.filter(g => g.commence_time.startsWith(TODAY_DATE));
-        todayGames.forEach((g, i) => {
+        todayGames.forEach((g) => {
           const h2h = g.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
           const spreads = g.bookmakers?.[0]?.markets?.find(m => m.key === "spreads");
           const totals = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals");
@@ -766,7 +766,7 @@ export default function App() {
           const awayML = h2h?.outcomes?.find(o => o.name === awayTeam);
           const homeML = h2h?.outcomes?.find(o => o.name === homeTeam);
           allGames.push({
-            id: `live_${sport}_${i}`,
+            id: g.id,
             away: awayTeam,
             home: homeTeam,
             time: `${time} ET`,
@@ -784,10 +784,36 @@ export default function App() {
       }
 
       if (allGames.length > 0) {
-        setGames(allGames);
-        // Cache in Supabase so everyone gets the same games all day
+        // Merge with existing cache — keep games that already have picks against them
+        const { data: existing } = await supabase
+          .from("group_results")
+          .select("result")
+          .eq("key", `__odds_cache__${TODAY_DATE}`)
+          .eq("date", TODAY_DATE)
+          .maybeSingle();
+
+        let mergedGames = allGames;
+        if (existing?.result) {
+          try {
+            const cachedGames = JSON.parse(existing.result);
+            // Find all game IDs that have active picks today
+            const pickedIds = new Set();
+            Object.values(allPicks).forEach(p => {
+              Object.keys(p.selections || {}).forEach(key => {
+                pickedIds.add(key.split("__")[0]);
+              });
+            });
+            // Keep cached games that have picks but aren't in new fetch (stale lines)
+            const preservedGames = cachedGames.filter(cg =>
+              pickedIds.has(cg.id) && !allGames.find(ng => ng.id === cg.id)
+            );
+            mergedGames = [...allGames, ...preservedGames];
+          } catch(e) { /* ignore parse errors */ }
+        }
+
+        setGames(mergedGames);
         await supabase.from("group_results").upsert(
-          { key: `__odds_cache__${TODAY_DATE}`, result: JSON.stringify(allGames), date: TODAY_DATE },
+          { key: `__odds_cache__${TODAY_DATE}`, result: JSON.stringify(mergedGames), date: TODAY_DATE },
           { onConflict: "key,date" }
         );
       }
