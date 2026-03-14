@@ -710,11 +710,11 @@ export default function App() {
   // Load from cache on session start — admin can manually refresh via button
   const oddsFetchedRef = useRef(false);
   useEffect(() => {
-    if (!session) return;
+    if (!session && !viewerMode) return;
     if (oddsFetchedRef.current) return;
     oddsFetchedRef.current = true;
     loadOddsFromCache();
-  }, [session]);
+  }, [session, viewerMode]);
 
   async function loadOddsFromCache() {
     try {
@@ -1254,7 +1254,7 @@ export default function App() {
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           <div style={{ height: 1, background: "rgba(255,255,255,0.07)", marginBottom: 16 }} />
-          <button onClick={() => { setViewerMode(true); setPage("group"); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
+          <button onClick={() => { oddsFetchedRef.current = false; setViewerMode(true); setPage("group"); loadOddsFromCache(); loadData(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
             👀 Watch without an account
           </button>
         </div>
