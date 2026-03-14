@@ -477,7 +477,7 @@ export default function App() {
       resultsRows.forEach(row => { built[row.key] = row.result; });
       setPlayResults(built);
       recomputeRecord(built);
-      checkForNewWins(built, allGames.length > 0 ? allGames : games);
+      checkForNewWins(built, games);
     }
 
     // Load all-time record — only rows with graded results
