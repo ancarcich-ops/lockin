@@ -397,6 +397,33 @@ function WinCelebration({ wins, phase, onDismiss }) {
   );
 }
 
+
+// ─── LOGO SVG ─────────────────────────────────────────────────────────────────
+function LogoIcon({ isAdmin, size = 32 }) {
+  const blue = "#1E90FF";
+  const dot = isAdmin ? "#f59e0b" : "#facc15";
+  const ring1 = isAdmin ? "#f59e0b" : blue;
+  const ring2 = isAdmin ? "rgba(245,158,11,0.45)" : `rgba(30,144,255,0.45)`;
+  const ring3 = isAdmin ? "rgba(245,158,11,0.22)" : `rgba(30,144,255,0.22)`;
+  const tick  = isAdmin ? `rgba(245,158,11,0.6)` : `rgba(30,144,255,0.6)`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80" style={{ display:"block" }}>
+      <circle cx="40" cy="40" r="34" fill="none" stroke={ring1} strokeWidth="2.2"/>
+      <circle cx="40" cy="40" r="22" fill="none" stroke={ring2} strokeWidth="1"/>
+      <circle cx="40" cy="40" r="11" fill="none" stroke={ring3} strokeWidth="0.7"/>
+      <line x1="40" y1="2"  x2="40" y2="16" stroke={ring1} strokeWidth="3"   strokeLinecap="square"/>
+      <line x1="40" y1="64" x2="40" y2="78" stroke={ring1} strokeWidth="3"   strokeLinecap="square"/>
+      <line x1="2"  y1="40" x2="16" y2="40" stroke={ring1} strokeWidth="3"   strokeLinecap="square"/>
+      <line x1="64" y1="40" x2="78" y2="40" stroke={ring1} strokeWidth="3"   strokeLinecap="square"/>
+      <line x1="40" y1="27" x2="40" y2="32" stroke={tick}  strokeWidth="1.8" strokeLinecap="square"/>
+      <line x1="40" y1="48" x2="40" y2="53" stroke={tick}  strokeWidth="1.8" strokeLinecap="square"/>
+      <line x1="27" y1="40" x2="32" y2="40" stroke={tick}  strokeWidth="1.8" strokeLinecap="square"/>
+      <line x1="48" y1="40" x2="53" y2="40" stroke={tick}  strokeWidth="1.8" strokeLinecap="square"/>
+      <circle cx="40" cy="40" r="3.2" fill={dot}/>
+    </svg>
+  );
+}
+
 // ─── PLAYER PICKS MODAL ───────────────────────────────────────────────────────
 function PlayerModal({ player, allPicks, games, onClose }) {
   const picks = allPicks[player];
@@ -1198,7 +1225,7 @@ export default function App() {
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
       <div className="glass-card pop" style={{ borderRadius: 24, padding: "40px 32px", width: "100%", maxWidth: 380, position: "relative", zIndex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 16, background: "linear-gradient(135deg, #1E90FF, #0ea5e9)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 14px", boxShadow: "0 4px 24px rgba(30,144,255,0.4)" }}>🎯</div>
+          <div style={{ width: 52, height: 52, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><LogoIcon isAdmin={false} size={52} /></div>
           <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Lock In</div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{authMode === "login" ? "Welcome back" : "Create your account"}</div>
         </div>
@@ -1270,8 +1297,8 @@ export default function App() {
       <div className="glass-nav" style={{ position: "sticky", top: 0, zIndex: 200 }}>
         <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 22px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div className="logo-btn" onClick={handleLogoTap} style={{ display: "flex", alignItems: "center", gap: 11 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 11, background: isAdmin?"linear-gradient(135deg, #f59e0b, #fbbf24)":"linear-gradient(135deg, #1E90FF, #0ea5e9)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, boxShadow: isAdmin?"0 4px 16px rgba(245,158,11,0.5)":"0 4px 16px rgba(30,144,255,0.4)", transition: "all 0.3s" }}>
-              {isAdmin ? "⚡" : "🎯"}
+            <div style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s" }}>
+              <LogoIcon isAdmin={isAdmin} size={36} />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", letterSpacing: -0.3 }}>Lock In</div>
