@@ -70,9 +70,9 @@ function WinCelebration({ wins, phase, onDismiss }) {
     const ctx = canvas.getContext("2d");
     const W = canvas.width, H = canvas.height;
 
-    // Target — upper right quadrant
+    // Target - upper right quadrant
     const tgtX = W * 0.72, tgtY = H * 0.28;
-    // Missile start — lower left
+    // Missile start - lower left
     const msX0 = W * 0.10, msY0 = H * 0.82;
 
     let animPhase = "hunt";
@@ -430,147 +430,119 @@ function ProfilePage({ username, history, loading, isOwn, profilePublic, onToggl
   const now = new Date();
   const weekAgo = new Date(now - 7*24*60*60*1000).toISOString().slice(0,10);
   const monthAgo = new Date(now.getFullYear(), now.getMonth()-1, now.getDate()).toISOString().slice(0,10);
-
-  const filtered = history.filter(h => {
-    if (tab === "week") return h.date >= weekAgo;
-    if (tab === "month") return h.date >= monthAgo;
-    return true;
-  });
+  const filtered = history.filter(h => tab==="week"?h.date>=weekAgo:tab==="month"?h.date>=monthAgo:true);
 
   let wins=0, losses=0, pushes=0, unitsNet=0;
   const sportMap = {};
   filtered.forEach(h => {
-    if (h.result === "win"){ wins++; unitsNet += (h.units_result ?? h.units ?? 1); }
-    else if (h.result === "loss"){ losses++; unitsNet += (h.units_result ?? -(h.units ?? 1)); }
-    else if (h.result === "push") pushes++;
-    const sp = h.sport || "ncaab";
-    if (!sportMap[sp]) sportMap[sp] = { wins:0, losses:0, pushes:0, units:0 };
-    if (h.result === "win"){ sportMap[sp].wins++; sportMap[sp].units += (h.units_result ?? h.units ?? 1); }
-    else if (h.result === "loss"){ sportMap[sp].losses++; sportMap[sp].units += (h.units_result ?? -(h.units ?? 1)); }
-    else if (h.result === "push") sportMap[sp].pushes++;
+    if (h.result==="win"){ wins++; unitsNet+=(h.units_result??h.units??1); }
+    else if (h.result==="loss"){ losses++; unitsNet+=(h.units_result??-(h.units??1)); }
+    else if (h.result==="push") pushes++;
+    const sp = h.sport||"ncaab";
+    if (!sportMap[sp]) sportMap[sp]={wins:0,losses:0,pushes:0,units:0};
+    if (h.result==="win"){ sportMap[sp].wins++; sportMap[sp].units+=(h.units_result??h.units??1); }
+    else if (h.result==="loss"){ sportMap[sp].losses++; sportMap[sp].units+=(h.units_result??-(h.units??1)); }
+    else if (h.result==="push") sportMap[sp].pushes++;
   });
 
-  const total = wins + losses + pushes;
-  const winPct = total > 0 ? Math.round((wins / (wins + losses || 1)) * 100) : null;
-  const graded = filtered.filter(h => h.result).length;
-  const pending = filtered.filter(h => !h.result).length;
-
-  let streak=0, streakType=null;
-  for (const h of [...history].sort((a,b) => b.date.localeCompare(a.date))) {
-    if (!h.result || h.result === "push") break;
-    if (!streakType) streakType = h.result;
-    if (h.result === streakType) streak++;
-    else break;
+  const total=wins+losses+pushes;
+  const winPct=total>0?Math.round((wins/(wins+losses||1))*100):null;
+  let streak=0,streakType=null;
+  for (const h of [...history].sort((a,b)=>b.date.localeCompare(a.date))) {
+    if (!h.result||h.result==="push") break;
+    if (!streakType) streakType=h.result;
+    if (h.result===streakType) streak++; else break;
   }
-
-  const rc = (r) => r==="win"?"#4ade80":r==="loss"?"#f87171":r==="push"?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.2)";
-  const rb = (r) => r==="win"?"rgba(74,222,128,0.12)":r==="loss"?"rgba(248,113,113,0.12)":r==="push"?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.04)";
-  const showContent = isOwn || profilePublic;
+  const rc=(r)=>r==="win"?"#4ade80":r==="loss"?"#f87171":"rgba(255,255,255,0.3)";
+  const rb=(r)=>r==="win"?"rgba(74,222,128,0.1)":r==="loss"?"rgba(248,113,113,0.1)":"rgba(255,255,255,0.04)";
+  const show=isOwn||profilePublic;
 
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.7)", backdropFilter:"blur(8px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.09)", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:660, maxHeight:"92vh", overflowY:"auto", paddingBottom:32 }}>
-
-        {/* Handle */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
-          <div style={{ width:40, height:4, borderRadius:2, background:"rgba(255,255,255,0.15)" }} />
+    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#0d0b1e",border:"1px solid rgba(255,255,255,0.09)",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:660,maxHeight:"92vh",overflowY:"auto",paddingBottom:32}}>
+        <div style={{display:"flex",justifyContent:"center",padding:"12px 0 0"}}>
+          <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)"}} />
         </div>
-
-        {/* Header */}
-        <div style={{ padding:"20px 24px 0" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-              <div style={{ width:52, height:52, borderRadius:16, background:"linear-gradient(135deg, #1E90FF, #0ea5e9)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff" }}>
+        <div style={{padding:"20px 24px 0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#1E90FF,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:800,color:"#fff"}}>
                 {username[0].toUpperCase()}
               </div>
               <div>
-                <div style={{ fontSize:20, fontWeight:800, color:"#fff", letterSpacing:-0.3 }}>{username}</div>
-                {isOwn && streak > 1 && (
-                  <div style={{ fontSize:11, color:streakType==="win"?"#4ade80":"#f87171", marginTop:3 }}>
-                    {streakType==="win"?"🔥":"❄️"} {streak} {streakType} streak
-                  </div>
-                )}
+                <div style={{fontSize:20,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>{username}</div>
+                {isOwn&&streak>1&&<div style={{fontSize:11,color:streakType==="win"?"#4ade80":"#f87171",marginTop:3}}>{streakType==="win"?"🔥":"❄️"} {streak} {streakType} streak</div>}
               </div>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
-              <button onClick={onClose} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, color:"rgba(255,255,255,0.4)", fontSize:18, width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
-              {isOwn && (
-                <button onClick={() => onTogglePublic(!profilePublic)} style={{ fontSize:10, fontWeight:600, letterSpacing:1, padding:"5px 10px", borderRadius:8, border:`1px solid ${profilePublic?"rgba(30,144,255,0.4)":"rgba(255,255,255,0.12)"}`, background:profilePublic?"rgba(30,144,255,0.15)":"rgba(255,255,255,0.04)", color:profilePublic?"#bae6fd":"rgba(255,255,255,0.3)", cursor:"pointer", fontFamily:"Outfit, sans-serif", textTransform:"uppercase" }}>
-                  {profilePublic ? "🌐 Public" : "🔒 Private"}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}}>
+              <button onClick={onClose} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"rgba(255,255,255,0.4)",fontSize:18,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              {isOwn&&(
+                <button onClick={()=>onTogglePublic(!profilePublic)} style={{fontSize:10,fontWeight:600,letterSpacing:1,padding:"5px 10px",borderRadius:8,border:`1px solid ${profilePublic?"rgba(30,144,255,0.4)":"rgba(255,255,255,0.12)"}`,background:profilePublic?"rgba(30,144,255,0.15)":"rgba(255,255,255,0.04)",color:profilePublic?"#bae6fd":"rgba(255,255,255,0.3)",cursor:"pointer",fontFamily:"Outfit,sans-serif",textTransform:"uppercase"}}>
+                  {profilePublic?"🌐 Public":"🔒 Private"}
                 </button>
               )}
             </div>
           </div>
-
-          {/* Private wall */}
-          {!showContent && (
-            <div style={{ textAlign:"center", padding:"40px 20px 60px" }}>
-              <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
-              <div style={{ fontSize:16, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:8 }}>Private profile</div>
-              <div style={{ fontSize:13, color:"rgba(255,255,255,0.25)", lineHeight:1.6 }}>This player keeps their stats private.</div>
+          {!show&&(
+            <div style={{textAlign:"center",padding:"40px 20px 60px"}}>
+              <div style={{fontSize:40,marginBottom:16}}>🔒</div>
+              <div style={{fontSize:16,fontWeight:700,color:"rgba(255,255,255,0.5)",marginBottom:8}}>Private profile</div>
+              <div style={{fontSize:13,color:"rgba(255,255,255,0.25)"}}>This player keeps their stats private.</div>
             </div>
           )}
-
-          {/* Stats */}
-          {showContent && (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
-              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px 18px" }}>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>Record</div>
-                <div style={{ fontSize:28, fontWeight:800, color:"#fff", letterSpacing:-1 }}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</div>
-                {winPct !== null && <div style={{ fontSize:12, color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)", marginTop:3 }}>{winPct}% win rate</div>}
+          {show&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+              <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"16px 18px"}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Record</div>
+                <div style={{fontSize:28,fontWeight:800,color:"#fff",letterSpacing:-1}}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</div>
+                {winPct!==null&&<div style={{fontSize:12,color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)",marginTop:3}}>{winPct}% win rate</div>}
               </div>
-              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px 18px" }}>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>Units</div>
-                <div style={{ fontSize:28, fontWeight:800, color:unitsNet>0?"#4ade80":unitsNet<0?"#f87171":"rgba(255,255,255,0.5)", letterSpacing:-1 }}>{unitsNet>0?"+":""}{Number(unitsNet.toFixed(1))}</div>
-                <div style={{ fontSize:12, color:"rgba(255,255,255,0.3)", marginTop:3 }}>{graded} graded · {pending} pending</div>
+              <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"16px 18px"}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Units</div>
+                <div style={{fontSize:28,fontWeight:800,color:unitsNet>0?"#4ade80":unitsNet<0?"#f87171":"rgba(255,255,255,0.5)",letterSpacing:-1}}>{unitsNet>0?"+":""}{Number(unitsNet.toFixed(1))}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3}}>{filtered.filter(h=>h.result).length} graded · {filtered.filter(h=>!h.result).length} pending</div>
               </div>
             </div>
           )}
-
-          {/* Tabs */}
-          {showContent && (
-            <div style={{ display:"flex", background:"rgba(255,255,255,0.05)", borderRadius:10, padding:3, gap:2, marginBottom:20 }}>
-              {[["all","All Time"],["month","This Month"],["week","This Week"],["sport","By Sport"]].map(([t, label]) => (
-                <button key={t} onClick={() => setTab(t)} style={{ flex:1, padding:"7px 4px", background:tab===t?"rgba(30,144,255,0.3)":"transparent", border:tab===t?"1px solid rgba(30,144,255,0.4)":"1px solid transparent", borderRadius:8, color:tab===t?"#e0f2fe":"rgba(255,255,255,0.35)", fontSize:10, fontWeight:tab===t?700:400, cursor:"pointer", fontFamily:"Outfit, sans-serif", letterSpacing:0.3, whiteSpace:"nowrap" }}>
+          {show&&(
+            <div style={{display:"flex",background:"rgba(255,255,255,0.05)",borderRadius:10,padding:3,gap:2,marginBottom:20}}>
+              {[["all","All Time"],["month","This Month"],["week","This Week"],["sport","By Sport"]].map(([t,label])=>(
+                <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"7px 4px",background:tab===t?"rgba(30,144,255,0.3)":"transparent",border:tab===t?"1px solid rgba(30,144,255,0.4)":"1px solid transparent",borderRadius:8,color:tab===t?"#e0f2fe":"rgba(255,255,255,0.35)",fontSize:10,fontWeight:tab===t?700:400,cursor:"pointer",fontFamily:"Outfit,sans-serif",whiteSpace:"nowrap"}}>
                   {label}
                 </button>
               ))}
             </div>
           )}
         </div>
-
-        {/* Content */}
-        {showContent && (
-          <div style={{ padding:"0 24px" }}>
-            {loading && <div style={{ textAlign:"center", color:"rgba(255,255,255,0.3)", padding:40, fontSize:13 }}>Loading...</div>}
-            {!loading && filtered.length === 0 && (
-              <div style={{ textAlign:"center", color:"rgba(255,255,255,0.25)", padding:40, fontSize:13 }}>No picks yet{tab!=="all"?" for this period":""}</div>
-            )}
-            {tab === "sport" && !loading && Object.entries(sportMap).map(([sport, s]) => (
-              <div key={sport} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"14px 16px", marginBottom:10 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#fff", textTransform:"uppercase", letterSpacing:1 }}>{sport}</div>
-                  <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                    <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{s.wins}-{s.losses}{s.pushes>0?`-${s.pushes}`:""}</span>
-                    <span style={{ fontSize:12, fontWeight:600, color:s.units>0?"#4ade80":s.units<0?"#f87171":"rgba(255,255,255,0.4)" }}>{s.units>0?"+":""}{Number(s.units.toFixed(1))}u</span>
+        {show&&(
+          <div style={{padding:"0 24px"}}>
+            {loading&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",padding:40,fontSize:13}}>Loading...</div>}
+            {!loading&&filtered.length===0&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",padding:40,fontSize:13}}>No picks yet{tab!=="all"?" for this period":""}</div>}
+            {tab==="sport"&&!loading&&Object.entries(sportMap).map(([sport,s])=>(
+              <div key={sport} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#fff",textTransform:"uppercase",letterSpacing:1}}>{sport}</div>
+                  <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{s.wins}-{s.losses}{s.pushes>0?`-${s.pushes}`:""}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:s.units>0?"#4ade80":s.units<0?"#f87171":"rgba(255,255,255,0.4)"}}>{s.units>0?"+":""}{Number(s.units.toFixed(1))}u</span>
                   </div>
                 </div>
               </div>
             ))}
-            {tab !== "sport" && !loading && filtered.map(h => (
-              <div key={h.id} style={{ padding:"12px 16px", background:rb(h.result), border:`1px solid ${h.result?rc(h.result)+"30":"rgba(255,255,255,0.07)"}`, borderLeft:`3px solid ${rc(h.result)}`, borderRadius:12, marginBottom:8 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:"#e0f2fe" }}>{h.label}</div>
-                    {h.matchup && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:2 }}>{h.matchup}</div>}
-                    <div style={{ fontSize:10, color:"rgba(255,255,255,0.2)", marginTop:4 }}>{h.date} · {h.sport?.toUpperCase()}</div>
+            {tab!=="sport"&&!loading&&filtered.map(h=>(
+              <div key={h.id} style={{padding:"12px 16px",background:rb(h.result),border:`1px solid ${h.result?rc(h.result)+"30":"rgba(255,255,255,0.07)"}`,borderLeft:`3px solid ${rc(h.result)}`,borderRadius:12,marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#e0f2fe"}}>{h.label}</div>
+                    {h.matchup&&<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",marginTop:2}}>{h.matchup}</div>}
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:4}}>{h.date} · {h.sport?.toUpperCase()}</div>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, marginLeft:12 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:rc(h.result), background:rb(h.result), border:`1px solid ${rc(h.result)}40`, borderRadius:6, padding:"3px 8px" }}>
-                      {h.result ? h.result.toUpperCase() : "PENDING"}
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,marginLeft:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:rc(h.result),background:rb(h.result),border:`1px solid ${rc(h.result)}40`,borderRadius:6,padding:"3px 8px"}}>
+                      {h.result?h.result.toUpperCase():"PENDING"}
                     </div>
-                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>
-                      {h.units||1}u{h.units_result!=null ? ` → ${h.units_result>0?"+":""}${Number(h.units_result.toFixed(1))}` : ""}
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>
+                      {h.units||1}u{h.units_result!=null?` -> ${h.units_result>0?"+":""}${Number(h.units_result.toFixed(1))}`:""}
                     </div>
                   </div>
                 </div>
@@ -578,13 +550,10 @@ function ProfilePage({ username, history, loading, isOwn, profilePublic, onToggl
             ))}
           </div>
         )}
-
       </div>
-    </div>
     </div>
   );
 }
-
 // ─── PLAYER PICKS MODAL ───────────────────────────────────────────────────────
 function PlayerModal({ player, allPicks, games, onClose }) {
   const picks = allPicks[player];
@@ -625,7 +594,7 @@ function PlayerModal({ player, allPicks, games, onClose }) {
           <div style={{ textAlign: "center", color: "rgba(255,255,255,0.25)", fontSize: 13, padding: "20px 0" }}>No picks submitted</div>
         ) : isPrivate ? (
           <div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginBottom: 14, fontStyle: "italic" }}>This player's picks are private — you can see which games they bet but not which side.</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginBottom: 14, fontStyle: "italic" }}>This player's picks are private - you can see which games they bet but not which side.</div>
             {keys.map(key => {
               const stored = picks.selections[key];
               const matchup = stored?.matchup || (() => {
@@ -783,7 +752,7 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        // Read username directly from session metadata — no network call needed
+        // Read username directly from session metadata - no network call needed
         const uname = session.user?.user_metadata?.username || null;
         if (uname) {
           setUsername(uname);
@@ -836,7 +805,7 @@ export default function App() {
   async function handleLogin() {
     if (!authUser.trim() || !authPass.trim()) return setAuthError("Fill in all fields.");
     setAuthWorking(true); setAuthError("");
-    // Construct fake email directly — no DB lookup needed
+    // Construct fake email directly - no DB lookup needed
     const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
     console.log("[LockIn] attempting login with email:", fakeEmail);
     const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: authPass });
@@ -878,7 +847,7 @@ export default function App() {
   }
 
   // ── Fetch odds ───────────────────────────────────────────────────────────
-  // Load from cache on session start — admin can manually refresh via button
+  // Load from cache on session start - admin can manually refresh via button
   const oddsFetchedRef = useRef(false);
   useEffect(() => {
     if (!session && !viewerMode) return;
@@ -902,7 +871,7 @@ export default function App() {
           setGames(cachedGames);
         }
       } else {
-        console.log("[LockIn] no cache for today yet — admin can refresh odds");
+        console.log("[LockIn] no cache for today yet - admin can refresh odds");
       }
     } catch (err) {
       console.error("[LockIn] cache load error:", err);
@@ -914,7 +883,7 @@ export default function App() {
     if (!apiKey) { setOddsError("No API key configured."); return; }
     setOddsLoading(true); setOddsError(null);
     try {
-      console.log("[LockIn] admin triggered odds refresh — hitting API");
+      console.log("[LockIn] admin triggered odds refresh - hitting API");
       const sports = ["basketball_ncaab"];
       const allGames = [];
       for (const sport of sports) {
@@ -955,7 +924,7 @@ export default function App() {
       }
 
       if (allGames.length > 0) {
-        // Merge with existing cache — keep games that already have picks against them
+        // Merge with existing cache - keep games that already have picks against them
         const { data: existing } = await supabase
           .from("group_results")
           .select("result")
@@ -990,7 +959,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Odds fetch error:", err);
-      setOddsError("Could not load live odds — showing default games.");
+      setOddsError("Could not load live odds - showing default games.");
     } finally {
       setOddsLoading(false);
     }
@@ -1043,7 +1012,7 @@ export default function App() {
       checkForNewWins(built, games);
     }
 
-    // Load all-time record — only rows with graded results
+    // Load all-time record - only rows with graded results
     const { data: allResultsRows } = await supabase
       .from("group_results")
       .select("result")
@@ -1109,7 +1078,7 @@ export default function App() {
     setRecord(rec);
   }
 
-  // Auto-advance celebration — missile sequence takes ~3.2s before settle
+  // Auto-advance celebration - missile sequence takes ~3.2s before settle
   useEffect(() => {
     if (showCelebration && celebrationPhase === "explode") {
       const t = setTimeout(() => setCelebrationPhase("settle"), 3200);
@@ -1125,7 +1094,7 @@ export default function App() {
       .map(([key]) => {
         const [gid, bt] = key.split("__");
 
-        // First try to get label from stored picks (most reliable — saved at submit time)
+        // First try to get label from stored picks (most reliable - saved at submit time)
         let label = null;
         const allPicksEntries = Object.values(allPicks);
         for (const p of allPicksEntries) {
@@ -1312,7 +1281,7 @@ export default function App() {
           const units = stored.units || 1;
           const unitsResult = result === "win" ? units : result === "loss" ? -units : 0;
           historyRows.push({
-            user_id: null, // will be resolved server-side via username lookup — we set it below
+            user_id: null, // will be resolved server-side via username lookup - we set it below
             username: uname,
             date: TODAY_DATE,
             pick_key: key,
@@ -1724,7 +1693,7 @@ export default function App() {
               <div style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#fbbf24", marginBottom: 12 }}>⚠ {oddsError}</div>
             )}
 
-            {/* Already submitted — show their picks */}
+            {/* Already submitted - show their picks */}
             {hasSubmitted && (
               <div style={{ marginBottom: 20 }}>
                 <div className="glass-card" style={{ borderRadius: 16, padding: "16px 20px", marginBottom: 14, border: "1px solid rgba(30,144,255,0.2)" }}>
@@ -1826,7 +1795,7 @@ export default function App() {
                               </div>
                             </div>
                           ))}
-                          {/* Note field — only show if this game has an active pick */}
+                          {/* Note field - only show if this game has an active pick */}
                           {(() => {
                             const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
                               .map(bt => `${game.id}__${bt}`)
@@ -2067,10 +2036,10 @@ export default function App() {
                       </div>
                     </div>
                     <button onClick={() => openPlayerProfile(s)} style={{ padding: "8px 16px", background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 10, color: "#bae6fd", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
-                      View →
+                      View ->
                     </button>
                   </div>
-                  {/* Preview picks — public only */}
+                  {/* Preview picks - public only */}
                   {!isPrivate && keys.length > 0 && (
                     <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "10px 20px 14px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {keys.slice(0, 4).map(key => {
@@ -2117,7 +2086,7 @@ export default function App() {
               )}
             </div>
             <button className="sub-btn" disabled={!canSubmit} onClick={submitPicks} style={{ padding: "13px 28px", background: canSubmit?"linear-gradient(135deg, #1E90FF, #0ea5e9)":"rgba(255,255,255,0.07)", border: "none", borderRadius: 13, color: canSubmit?"#fff":"rgba(255,255,255,0.2)", fontSize: 14, fontWeight: 700, cursor: canSubmit?"pointer":"not-allowed", fontFamily: "Outfit, sans-serif", letterSpacing: 0.2, boxShadow: canSubmit?"0 4px 20px rgba(30,144,255,0.4)":"none" }}>
-              Lock In →
+              Lock In ->
             </button>
           </div>
         </div>
