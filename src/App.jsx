@@ -424,6 +424,171 @@ function LogoIcon({ isAdmin, size = 32 }) {
   );
 }
 
+
+// ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
+function ProfilePage({ username, history, loading, isOwn, profilePublic, onTogglePublic, onClose, tab, setTab }) {
+  const records = { wins: 0, losses: 0, pushes: 0 };
+  let unitsNet = 0;
+  const sportBreakdown = {};
+  const now = new Date();
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
+
+  const filtered = history.filter(h => {
+    if (tab === "week") return h.date >= weekAgo;
+    if (tab === "month") return h.date >= monthAgo;
+    if (tab === "sport") return true;
+    return true;
+  });
+
+  filtered.forEach(h => {
+    if (h.result === "win") { records.wins++; unitsNet += (h.units_result || h.units || 1); }
+    else if (h.result === "loss") { records.losses++; unitsNet += (h.units_result || -(h.units || 1)); }
+    else if (h.result === "push") records.pushes++;
+    const sp = h.sport || "ncaab";
+    if (!sportBreakdown[sp]) sportBreakdown[sp] = { wins: 0, losses: 0, pushes: 0, units: 0 };
+    if (h.result === "win") { sportBreakdown[sp].wins++; sportBreakdown[sp].units += (h.units_result || h.units || 1); }
+    else if (h.result === "loss") { sportBreakdown[sp].losses++; sportBreakdown[sp].units += (h.units_result || -(h.units || 1)); }
+    else if (h.result === "push") sportBreakdown[sp].pushes++;
+  });
+
+  const total = records.wins + records.losses + records.pushes;
+  const winPct = total > 0 ? Math.round((records.wins / (records.wins + records.losses || 1)) * 100) : null;
+  const graded = filtered.filter(h => h.result);
+  const pending = filtered.filter(h => !h.result);
+
+  // Current streak
+  let streak = 0, streakType = null;
+  for (const h of [...history].sort((a,b) => b.date.localeCompare(a.date))) {
+    if (!h.result || h.result === "push") break;
+    if (!streakType) streakType = h.result;
+    if (h.result === streakType) streak++;
+    else break;
+  }
+
+  function resultColor(r) {
+    if (r === "win") return "#4ade80";
+    if (r === "loss") return "#f87171";
+    if (r === "push") return "rgba(255,255,255,0.4)";
+    return "rgba(255,255,255,0.2)";
+  }
+  function resultBg(r) {
+    if (r === "win") return "rgba(74,222,128,0.12)";
+    if (r === "loss") return "rgba(248,113,113,0.12)";
+    if (r === "push") return "rgba(255,255,255,0.06)";
+    return "rgba(255,255,255,0.04)";
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0b1e", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 660, maxHeight: "92vh", overflowY: "auto", paddingBottom: 32 }}>
+
+        {/* Handle bar */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 0" }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)" }} />
+        </div>
+
+        {/* Header */}
+        <div style={{ padding: "20px 24px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 52, height: 52, borderRadius: 16, background: "linear-gradient(135deg, #1E90FF, #0ea5e9)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: "#fff" }}>
+                {username[0].toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", letterSpacing: -0.3 }}>{username}</div>
+                {isOwn && streak > 1 && <div style={{ fontSize: 11, color: streakType === "win" ? "#4ade80" : "#f87171", marginTop: 3 }}>{streakType === "win" ? "🔥" : "❄️"} {streak} {streakType} streak</div>}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+              <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.4)", fontSize: 18, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              {isOwn && (
+                <button onClick={() => onTogglePublic(!profilePublic)} style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, padding: "5px 10px", borderRadius: 8, border: `1px solid ${profilePublic ? "rgba(30,144,255,0.4)" : "rgba(255,255,255,0.12)"}`, background: profilePublic ? "rgba(30,144,255,0.15)" : "rgba(255,255,255,0.04)", color: profilePublic ? "#bae6fd" : "rgba(255,255,255,0.3)", cursor: "pointer", fontFamily: "Outfit, sans-serif", textTransform: "uppercase" }}>
+                  {profilePublic ? "🌐 Public" : "🔒 Private"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Private wall — show nothing to others if private */}
+          {!isOwn && !profilePublic && (
+            <div style={{ textAlign: "center", padding: "40px 20px 60px" }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>Private profile</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)", lineHeight: 1.6 }}>This player keeps their stats private.</div>
+            </div>
+          )}
+
+          {/* Hero stats — only for own profile or public profiles */}
+          {(isOwn || profilePublic) && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Record</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", letterSpacing: -1 }}>{records.wins}-{records.losses}{records.pushes > 0 ? `-${records.pushes}` : ""}</div>
+              {winPct !== null && <div style={{ fontSize: 12, color: records.wins > records.losses ? "#4ade80" : records.losses > records.wins ? "#f87171" : "rgba(255,255,255,0.4)", marginTop: 3 }}>{winPct}% win rate</div>}
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: unitsNet > 0 ? "#4ade80" : unitsNet < 0 ? "#f87171" : "rgba(255,255,255,0.5)", letterSpacing: -1 }}>{unitsNet > 0 ? "+" : ""}{Number(unitsNet.toFixed(1))}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{graded.length} graded · {pending.length} pending</div>
+            </div>
+          </div>
+
+          </div>}
+
+          {/* Tabs */}
+          {(isOwn || profilePublic) && <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: 3, gap: 2, marginBottom: 20 }}>
+            {[["all","All Time"],["month","This Month"],["week","This Week"],["sport","By Sport"]].map(([t, label]) => (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "7px 4px", background: tab === t ? "rgba(30,144,255,0.3)" : "transparent", border: tab === t ? "1px solid rgba(30,144,255,0.4)" : "1px solid transparent", borderRadius: 8, color: tab === t ? "#e0f2fe" : "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: tab === t ? 700 : 400, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3, whiteSpace: "nowrap" }}>
+                {label}
+              </button>
+            ))}
+          </div>}
+        </div>
+
+        {(isOwn || profilePublic) && <div style={{ padding: "0 24px" }}>
+          {loading && <div style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", padding: 40, fontSize: 13 }}>Loading history...</div>}
+
+          {!loading && filtered.length === 0 && (
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,0.25)", padding: 40, fontSize: 13 }}>No picks yet{tab !== "all" ? " for this period" : ""}</div>
+          )}
+
+          {/* Sport breakdown */}
+          {tab === "sport" && !loading && Object.entries(sportBreakdown).map(([sport, s]) => (
+            <div key={sport} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: 1 }}>{sport}</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{s.wins}-{s.losses}{s.pushes > 0 ? `-${s.pushes}` : ""}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: s.units > 0 ? "#4ade80" : s.units < 0 ? "#f87171" : "rgba(255,255,255,0.4)" }}>{s.units > 0 ? "+" : ""}{Number(s.units.toFixed(1))}u</span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Pick history list */}
+          {tab !== "sport" && !loading && filtered.map(h => (
+            <div key={h.id} style={{ padding: "12px 16px", background: resultBg(h.result), border: `1px solid ${h.result ? resultColor(h.result) + "30" : "rgba(255,255,255,0.07)"}`, borderLeft: `3px solid ${resultColor(h.result)}`, borderRadius: 12, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#e0f2fe" }}>{h.label}</div>
+                  {h.matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{h.matchup}</div>}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 4 }}>{h.date} · {h.sport?.toUpperCase()}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginLeft: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: resultColor(h.result), background: resultBg(h.result), border: `1px solid ${resultColor(h.result)}40`, borderRadius: 6, padding: "3px 8px" }}>
+                    {h.result ? h.result.toUpperCase() : "PENDING"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{h.units || 1}u {h.units_result !== null && h.units_result !== undefined ? `→ ${h.units_result > 0 ? "+" : ""}${Number(h.units_result.toFixed(1))}` : ""}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PLAYER PICKS MODAL ───────────────────────────────────────────────────────
 function PlayerModal({ player, allPicks, games, onClose }) {
   const picks = allPicks[player];
@@ -599,6 +764,16 @@ export default function App() {
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
   const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
+
+  // Profile
+  const [showProfile, setShowProfile]       = useState(false);
+  const [profileUser, setProfileUser]       = useState(null); // username to view
+  const [pickHistory, setPickHistory]       = useState([]); // own history
+  const [profileHistory, setProfileHistory] = useState([]); // viewed user history
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [profilePublic, setProfilePublic]   = useState(false); // own public toggle
+  const [pickUnits, setPickUnits]           = useState({}); // { [key]: units }
+  const [profileTab, setProfileTab]         = useState("all"); // all|month|week|sport
 
   // Admin
   const [isAdmin, setIsAdmin]               = useState(false);
@@ -893,6 +1068,41 @@ export default function App() {
     }
   }
 
+  async function loadPickHistory(uname) {
+    setHistoryLoading(true);
+    const { data } = await supabase
+      .from("pick_history")
+      .select("*")
+      .eq("username", uname)
+      .order("date", { ascending: false });
+    if (data) setPickHistory(data);
+    // Also get own public setting
+    const first = data?.[0];
+    if (first) setProfilePublic(first.is_public);
+    setHistoryLoading(false);
+  }
+
+  async function loadProfileHistory(uname) {
+    setHistoryLoading(true);
+    const { data } = await supabase
+      .from("pick_history")
+      .select("*")
+      .eq("username", uname)
+      .eq("is_public", true)
+      .order("date", { ascending: false });
+    // If no public rows, profile is private
+    setProfilePublic(data && data.length > 0);
+    if (data) setProfileHistory(data);
+    setHistoryLoading(false);
+  }
+
+  async function toggleProfilePublic(isNowPublic) {
+    setProfilePublic(isNowPublic);
+    await supabase.from("pick_history")
+      .update({ is_public: isNowPublic })
+      .eq("username", username);
+  }
+
   function recomputeRecord(results) {
     const rec = { wins: 0, losses: 0, pushes: 0 };
     Object.values(results).forEach(r => {
@@ -1056,7 +1266,7 @@ export default function App() {
         ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}`, matchup: `${g.away} @ ${g.home}` }),
       };
       const base = game ? BT[bt]?.(game) || {} : {};
-      enriched[key] = { ...base, ...(pickNotes[key] ? { note: pickNotes[key].trim() } : {}) };
+      enriched[key] = { ...base, ...(pickNotes[key] ? { note: pickNotes[key].trim() } : {}), units: pickUnits[key] || 1 };
     });
     const payload = {
       username,
@@ -1068,6 +1278,7 @@ export default function App() {
     const { error } = await supabase.from("picks").upsert(payload, { onConflict: "username,date" });
     if (!error) {
       setPickNotes({});
+      setPickUnits({});
       setMyPicks({ selections: enriched, is_public: isPublic });
       setAllPicks(prev => ({
         ...prev,
@@ -1085,6 +1296,8 @@ export default function App() {
     const isClear = result === null || prev === result;
     if (isClear) {
       await supabase.from("group_results").delete().eq("key", key).eq("date", TODAY_DATE);
+      // Clear result in pick_history for all users who had this pick
+      await supabase.from("pick_history").update({ result: null, units_result: null }).eq("pick_key", key).eq("date", TODAY_DATE);
       const next = { ...playResults };
       delete next[key];
       setPlayResults(next);
@@ -1094,6 +1307,41 @@ export default function App() {
       const next = { ...playResults, [key]: result };
       setPlayResults(next);
       recomputeRecord(next);
+
+      // Archive to pick_history for every user who had this pick
+      const historyRows = [];
+      Object.entries(allPicks).forEach(([uname, pickData]) => {
+        const stored = pickData.selections?.[key];
+        if (stored) {
+          const units = stored.units || 1;
+          const unitsResult = result === "win" ? units : result === "loss" ? -units : 0;
+          historyRows.push({
+            user_id: null, // will be resolved server-side via username lookup — we set it below
+            username: uname,
+            date: TODAY_DATE,
+            pick_key: key,
+            label: stored.label ? `${stored.label} ${stored.line}` : key,
+            matchup: stored.matchup || null,
+            sport: "ncaab",
+            units,
+            result,
+            units_result: unitsResult,
+            is_public: false, // default private, user can toggle
+          });
+        }
+      });
+
+      // Resolve user_ids from profiles table then upsert
+      if (historyRows.length > 0) {
+        const usernames = historyRows.map(r => r.username);
+        const { data: profiles } = await supabase.from("profiles").select("id, username").in("username", usernames);
+        const idMap = {};
+        profiles?.forEach(p => { idMap[p.username] = p.id; });
+        const rowsWithIds = historyRows.map(r => ({ ...r, user_id: idMap[r.username] || null })).filter(r => r.user_id);
+        if (rowsWithIds.length > 0) {
+          await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
+        }
+      }
     }
     // Refresh all-time record
     const { data: allResultsRows } = await supabase
@@ -1117,6 +1365,20 @@ export default function App() {
     const next = { ...allPicks };
     delete next[personUsername];
     setAllPicks(next);
+  }
+
+  // ── Player profile opener ───────────────────────────────────────────────────
+  function openPlayerProfile(uname) {
+    if (uname === username) {
+      setProfileUser(null);
+      setProfileTab("all");
+      loadPickHistory(username);
+    } else {
+      setProfileUser(uname);
+      setProfileTab("all");
+      loadProfileHistory(uname);
+    }
+    setShowProfile(true);
   }
 
   // ── Group play helpers ────────────────────────────────────────────────────
@@ -1322,6 +1584,21 @@ export default function App() {
       {/* ── WIN CELEBRATION ── */}
       {showCelebration && <WinCelebration wins={celebrationWins} phase={celebrationPhase} onDismiss={() => setShowCelebration(false)} />}
 
+      {/* ── PROFILE PAGE ── */}
+      {showProfile && (
+        <ProfilePage
+          username={profileUser || username}
+          history={profileUser && profileUser !== username ? profileHistory : pickHistory}
+          loading={historyLoading}
+          isOwn={!profileUser || profileUser === username}
+          profilePublic={profilePublic}
+          onTogglePublic={toggleProfilePublic}
+          onClose={() => { setShowProfile(false); setProfileUser(null); }}
+          tab={profileTab}
+          setTab={setProfileTab}
+        />
+      )}
+
       {/* ── PLAYER MODAL ── */}
       {viewingPlayer && (
         <PlayerModal
@@ -1373,10 +1650,15 @@ export default function App() {
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#bae6fd" }}>Sign In</span>
                 </button>
               ) : (
-              <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 10px 5px 10px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 110 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#bae6fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{username}</span>
-                <span style={{ fontSize: 8, color: "rgba(186,230,253,0.5)", flexShrink: 0 }}>▾</span>
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => { setProfileUser(null); setProfileTab("all"); loadPickHistory(username); setShowProfile(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: "50%", cursor: "pointer", fontFamily: "Outfit, sans-serif", fontSize: 13, fontWeight: 800, color: "#bae6fd" }}>
+                  {username[0]?.toUpperCase()}
+                </button>
+                <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 10px 5px 10px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 110 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#bae6fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{username}</span>
+                  <span style={{ fontSize: 8, color: "rgba(186,230,253,0.5)", flexShrink: 0 }}>▾</span>
+                </button>
+              </div>
               )}
               {showAccountMenu && (
                 <div className="glass-card pop" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", borderRadius: 14, minWidth: 180, padding: "8px", zIndex: 300, border: "1px solid rgba(30,144,255,0.25)" }} onClick={e => e.stopPropagation()}>
@@ -1411,7 +1693,7 @@ export default function App() {
             <div style={{ maxWidth: 660, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 2, scrollbarWidth: "none" }}>
               <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase", flexShrink: 0 }}>Filed:</span>
               {submitters.map(s => (
-                <span key={s} onClick={() => setViewingPlayer(s)} style={{ background: s===username?"rgba(30,144,255,0.25)":"rgba(30,144,255,0.12)", border: `1px solid ${s===username?"rgba(30,144,255,0.5)":"rgba(30,144,255,0.25)"}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#bae6fd", fontWeight: s===username?700:400, cursor: "pointer", transition: "all 0.15s" }}>
+                <span key={s} onClick={() => openPlayerProfile(s)} style={{ background: s===username?"rgba(30,144,255,0.25)":"rgba(30,144,255,0.12)", border: `1px solid ${s===username?"rgba(30,144,255,0.5)":"rgba(30,144,255,0.25)"}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#bae6fd", fontWeight: s===username?700:400, cursor: "pointer", transition: "all 0.15s" }}>
                   {s}{!allPicks[s]?.is_public ? " 🔒" : ""}
                 </span>
               ))}
@@ -1475,11 +1757,15 @@ export default function App() {
                     return game ? `${game.away} @ ${game.home}` : null;
                   })();
                   const note = stored?.note || null;
+                  const units = stored?.units || 1;
                   return (
-                    <div key={key} style={{ padding: "10px 16px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
-                      {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
-                      {note && <div style={{ fontSize: 11, color: "rgba(250,204,21,0.7)", marginTop: 4, fontStyle: "italic" }}>"{note}"</div>}
+                    <div key={key} style={{ padding: "10px 16px", background: "rgba(30,144,255,0.08)", border: "1px solid rgba(30,144,255,0.15)", borderRadius: 10, marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e0f2fe" }}>{displayLabel}</div>
+                        {matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{matchup}</div>}
+                        {note && <div style={{ fontSize: 11, color: "rgba(250,204,21,0.7)", marginTop: 4, fontStyle: "italic" }}>"{note}"</div>}
+                      </div>
+                      {units > 1 && <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(30,144,255,0.8)", background: "rgba(30,144,255,0.12)", borderRadius: 6, padding: "2px 8px", marginLeft: 8, flexShrink: 0 }}>{units}u</div>}
                     </div>
                   );
                 })}
@@ -1561,6 +1847,20 @@ export default function App() {
                                   onChange={e => setPickNotes(prev => ({ ...prev, [activeKey]: e.target.value }))}
                                   style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
                                 />
+                              </div>
+                              {/* Units selector */}
+                              <div style={{ marginTop: 10 }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  {[1,2,3,4,5].map(u => {
+                                    const active = (pickUnits[activeKey] || 1) === u;
+                                    return (
+                                      <button key={u} onClick={() => setPickUnits(prev => ({ ...prev, [activeKey]: u }))} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${active ? "rgba(30,144,255,0.6)" : "rgba(255,255,255,0.08)"}`, background: active ? "rgba(30,144,255,0.2)" : "rgba(255,255,255,0.03)", color: active ? "#bae6fd" : "rgba(255,255,255,0.3)", fontSize: 13, fontWeight: active ? 700 : 400, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>
+                                        {u}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
                           })()}
@@ -1716,7 +2016,7 @@ export default function App() {
               <>
                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(30,144,255,0.7)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10 }}>🔒 Consensus Plays</div>
                 {groupPlays.map(([key, people, dissenters], i) => (
-                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={false} onPlayerClick={setViewingPlayer} />
+                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={false} onPlayerClick={openPlayerProfile} />
                 ))}
               </>
             )}
@@ -1726,7 +2026,7 @@ export default function App() {
               <>
                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 10, marginTop: groupPlays.length>0?24:0 }}>Other Plays</div>
                 {otherPlays.map(([key, people, dissenters], i) => (
-                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={true} onPlayerClick={setViewingPlayer} />
+                  <PlayCard key={key} playKey={key} people={people} dissenters={dissenters} index={i} dimmed={true} onPlayerClick={openPlayerProfile} />
                 ))}
               </>
             )}
@@ -1770,7 +2070,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => setViewingPlayer(s)} style={{ padding: "8px 16px", background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 10, color: "#bae6fd", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                    <button onClick={() => openPlayerProfile(s)} style={{ padding: "8px 16px", background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 10, color: "#bae6fd", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
                       View →
                     </button>
                   </div>
