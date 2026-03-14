@@ -1314,20 +1314,18 @@ export default function App() {
       });
 
       // Use user_id already stored in allPicks (from picks table)
-      console.log("[LockIn] historyRows:", historyRows.length, historyRows.map(r => r.username));
-      console.log("[LockIn] allPicks keys:", Object.keys(allPicks));
-      console.log("[LockIn] sample user_id:", allPicks[historyRows[0]?.username]?.user_id);
+
       if (historyRows.length > 0) {
         const rowsWithIds = historyRows.map(r => ({
           ...r,
           user_id: allPicks[r.username]?.user_id || r.user_id || null
         })).filter(r => r.user_id);
-        console.log("[LockIn] rowsWithIds:", rowsWithIds.length, "filtered from", historyRows.length);
+
         if (rowsWithIds.length > 0) {
           const { error: histErr } = await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
           if (histErr) console.error("[LockIn] pick_history upsert error:", histErr.message);
           else {
-            console.log("[LockIn] pick_history upsert OK for", rowsWithIds.length, "rows");
+
             // Refresh profile history if it's currently open
             if (showProfile) {
               const viewingUser = profileUser || username;
