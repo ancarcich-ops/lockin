@@ -808,7 +808,7 @@ export default function App() {
 
   async function loadData(activeUsername) {
     const uname = activeUsername || username;
-    if (!uname) { setLoading(false); return; }
+    if (!uname && !viewerMode) { setLoading(false); return; }
     setLoading(true);
     try {
     const { data: picksRows } = await supabase
@@ -1541,7 +1541,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Group Plays</div>
                   <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>Plays where 2 or more people agree</div>
-                  {!hasSubmitted && <div style={{ fontSize: 12, color: "rgba(30,144,255,0.7)", marginTop: 6 }}>👈 Head to My Picks to add your plays</div>}
+                  {!hasSubmitted && !viewerMode && <div style={{ fontSize: 12, color: "rgba(30,144,255,0.7)", marginTop: 6 }}>👈 Head to My Picks to add your plays</div>}
                 </div>
                 {isAdmin && <div style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 10, padding: "6px 12px", fontSize: 11, color: "#fbbf24", fontWeight: 600 }}>⚡ Admin</div>}
               </div>
