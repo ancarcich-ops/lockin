@@ -427,38 +427,35 @@ function LogoIcon({ isAdmin, size = 32 }) {
 
 // ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
 function ProfilePage({ username, history, loading, isOwn, profilePublic, onTogglePublic, onClose, tab, setTab }) {
-  const records = { wins: 0, losses: 0, pushes: 0 };
-  let unitsNet = 0;
-  const sportBreakdown = {};
   const now = new Date();
-  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
+  const weekAgo = new Date(now - 7*24*60*60*1000).toISOString().slice(0,10);
+  const monthAgo = new Date(now.getFullYear(), now.getMonth()-1, now.getDate()).toISOString().slice(0,10);
 
   const filtered = history.filter(h => {
     if (tab === "week") return h.date >= weekAgo;
     if (tab === "month") return h.date >= monthAgo;
-    if (tab === "sport") return true;
     return true;
   });
 
+  let wins=0, losses=0, pushes=0, unitsNet=0;
+  const sportMap = {};
   filtered.forEach(h => {
-    if (h.result === "win") { records.wins++; unitsNet += (h.units_result || h.units || 1); }
-    else if (h.result === "loss") { records.losses++; unitsNet += (h.units_result || -(h.units || 1)); }
-    else if (h.result === "push") records.pushes++;
+    if (h.result === "win"){ wins++; unitsNet += (h.units_result ?? h.units ?? 1); }
+    else if (h.result === "loss"){ losses++; unitsNet += (h.units_result ?? -(h.units ?? 1)); }
+    else if (h.result === "push") pushes++;
     const sp = h.sport || "ncaab";
-    if (!sportBreakdown[sp]) sportBreakdown[sp] = { wins: 0, losses: 0, pushes: 0, units: 0 };
-    if (h.result === "win") { sportBreakdown[sp].wins++; sportBreakdown[sp].units += (h.units_result || h.units || 1); }
-    else if (h.result === "loss") { sportBreakdown[sp].losses++; sportBreakdown[sp].units += (h.units_result || -(h.units || 1)); }
-    else if (h.result === "push") sportBreakdown[sp].pushes++;
+    if (!sportMap[sp]) sportMap[sp] = { wins:0, losses:0, pushes:0, units:0 };
+    if (h.result === "win"){ sportMap[sp].wins++; sportMap[sp].units += (h.units_result ?? h.units ?? 1); }
+    else if (h.result === "loss"){ sportMap[sp].losses++; sportMap[sp].units += (h.units_result ?? -(h.units ?? 1)); }
+    else if (h.result === "push") sportMap[sp].pushes++;
   });
 
-  const total = records.wins + records.losses + records.pushes;
-  const winPct = total > 0 ? Math.round((records.wins / (records.wins + records.losses || 1)) * 100) : null;
-  const graded = filtered.filter(h => h.result);
-  const pending = filtered.filter(h => !h.result);
+  const total = wins + losses + pushes;
+  const winPct = total > 0 ? Math.round((wins / (wins + losses || 1)) * 100) : null;
+  const graded = filtered.filter(h => h.result).length;
+  const pending = filtered.filter(h => !h.result).length;
 
-  // Current streak
-  let streak = 0, streakType = null;
+  let streak=0, streakType=null;
   for (const h of [...history].sort((a,b) => b.date.localeCompare(a.date))) {
     if (!h.result || h.result === "push") break;
     if (!streakType) streakType = h.result;
@@ -466,125 +463,125 @@ function ProfilePage({ username, history, loading, isOwn, profilePublic, onToggl
     else break;
   }
 
-  function resultColor(r) {
-    if (r === "win") return "#4ade80";
-    if (r === "loss") return "#f87171";
-    if (r === "push") return "rgba(255,255,255,0.4)";
-    return "rgba(255,255,255,0.2)";
-  }
-  function resultBg(r) {
-    if (r === "win") return "rgba(74,222,128,0.12)";
-    if (r === "loss") return "rgba(248,113,113,0.12)";
-    if (r === "push") return "rgba(255,255,255,0.06)";
-    return "rgba(255,255,255,0.04)";
-  }
+  const rc = (r) => r==="win"?"#4ade80":r==="loss"?"#f87171":r==="push"?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.2)";
+  const rb = (r) => r==="win"?"rgba(74,222,128,0.12)":r==="loss"?"rgba(248,113,113,0.12)":r==="push"?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.04)";
+  const showContent = isOwn || profilePublic;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#0d0b1e", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 660, maxHeight: "92vh", overflowY: "auto", paddingBottom: 32 }}>
+    <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.7)", backdropFilter:"blur(8px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.09)", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:660, maxHeight:"92vh", overflowY:"auto", paddingBottom:32 }}>
 
-        {/* Handle bar */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 0" }}>
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)" }} />
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:40, height:4, borderRadius:2, background:"rgba(255,255,255,0.15)" }} />
         </div>
 
         {/* Header */}
-        <div style={{ padding: "20px 24px 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 52, height: 52, borderRadius: 16, background: "linear-gradient(135deg, #1E90FF, #0ea5e9)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: "#fff" }}>
+        <div style={{ padding:"20px 24px 0" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+              <div style={{ width:52, height:52, borderRadius:16, background:"linear-gradient(135deg, #1E90FF, #0ea5e9)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff" }}>
                 {username[0].toUpperCase()}
               </div>
               <div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", letterSpacing: -0.3 }}>{username}</div>
-                {isOwn && streak > 1 && <div style={{ fontSize: 11, color: streakType === "win" ? "#4ade80" : "#f87171", marginTop: 3 }}>{streakType === "win" ? "🔥" : "❄️"} {streak} {streakType} streak</div>}
+                <div style={{ fontSize:20, fontWeight:800, color:"#fff", letterSpacing:-0.3 }}>{username}</div>
+                {isOwn && streak > 1 && (
+                  <div style={{ fontSize:11, color:streakType==="win"?"#4ade80":"#f87171", marginTop:3 }}>
+                    {streakType==="win"?"🔥":"❄️"} {streak} {streakType} streak
+                  </div>
+                )}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-              <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.4)", fontSize: 18, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
+              <button onClick={onClose} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, color:"rgba(255,255,255,0.4)", fontSize:18, width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
               {isOwn && (
-                <button onClick={() => onTogglePublic(!profilePublic)} style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, padding: "5px 10px", borderRadius: 8, border: `1px solid ${profilePublic ? "rgba(30,144,255,0.4)" : "rgba(255,255,255,0.12)"}`, background: profilePublic ? "rgba(30,144,255,0.15)" : "rgba(255,255,255,0.04)", color: profilePublic ? "#bae6fd" : "rgba(255,255,255,0.3)", cursor: "pointer", fontFamily: "Outfit, sans-serif", textTransform: "uppercase" }}>
+                <button onClick={() => onTogglePublic(!profilePublic)} style={{ fontSize:10, fontWeight:600, letterSpacing:1, padding:"5px 10px", borderRadius:8, border:`1px solid ${profilePublic?"rgba(30,144,255,0.4)":"rgba(255,255,255,0.12)"}`, background:profilePublic?"rgba(30,144,255,0.15)":"rgba(255,255,255,0.04)", color:profilePublic?"#bae6fd":"rgba(255,255,255,0.3)", cursor:"pointer", fontFamily:"Outfit, sans-serif", textTransform:"uppercase" }}>
                   {profilePublic ? "🌐 Public" : "🔒 Private"}
                 </button>
               )}
             </div>
           </div>
 
-          {/* Private wall — show nothing to others if private */}
-          {!isOwn && !profilePublic && (
-            <div style={{ textAlign: "center", padding: "40px 20px 60px" }}>
-              <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>Private profile</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)", lineHeight: 1.6 }}>This player keeps their stats private.</div>
+          {/* Private wall */}
+          {!showContent && (
+            <div style={{ textAlign:"center", padding:"40px 20px 60px" }}>
+              <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:8 }}>Private profile</div>
+              <div style={{ fontSize:13, color:"rgba(255,255,255,0.25)", lineHeight:1.6 }}>This player keeps their stats private.</div>
             </div>
           )}
 
-          {/* Hero stats — only for own profile or public profiles */}
-          {(isOwn || profilePublic) && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Record</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", letterSpacing: -1 }}>{records.wins}-{records.losses}{records.pushes > 0 ? `-${records.pushes}` : ""}</div>
-              {winPct !== null && <div style={{ fontSize: 12, color: records.wins > records.losses ? "#4ade80" : records.losses > records.wins ? "#f87171" : "rgba(255,255,255,0.4)", marginTop: 3 }}>{winPct}% win rate</div>}
+          {/* Stats */}
+          {showContent && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px 18px" }}>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>Record</div>
+                <div style={{ fontSize:28, fontWeight:800, color:"#fff", letterSpacing:-1 }}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</div>
+                {winPct !== null && <div style={{ fontSize:12, color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)", marginTop:3 }}>{winPct}% win rate</div>}
+              </div>
+              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px 18px" }}>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>Units</div>
+                <div style={{ fontSize:28, fontWeight:800, color:unitsNet>0?"#4ade80":unitsNet<0?"#f87171":"rgba(255,255,255,0.5)", letterSpacing:-1 }}>{unitsNet>0?"+":""}{Number(unitsNet.toFixed(1))}</div>
+                <div style={{ fontSize:12, color:"rgba(255,255,255,0.3)", marginTop:3 }}>{graded} graded · {pending} pending</div>
+              </div>
             </div>
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: unitsNet > 0 ? "#4ade80" : unitsNet < 0 ? "#f87171" : "rgba(255,255,255,0.5)", letterSpacing: -1 }}>{unitsNet > 0 ? "+" : ""}{Number(unitsNet.toFixed(1))}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{graded.length} graded · {pending.length} pending</div>
-            </div>
-          </div>}
+          )}
 
           {/* Tabs */}
-          {(isOwn || profilePublic) && <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: 3, gap: 2, marginBottom: 20 }}>
-            {[["all","All Time"],["month","This Month"],["week","This Week"],["sport","By Sport"]].map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "7px 4px", background: tab === t ? "rgba(30,144,255,0.3)" : "transparent", border: tab === t ? "1px solid rgba(30,144,255,0.4)" : "1px solid transparent", borderRadius: 8, color: tab === t ? "#e0f2fe" : "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: tab === t ? 700 : 400, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3, whiteSpace: "nowrap" }}>
-                {label}
-              </button>
-            ))}
-          </div>}
+          {showContent && (
+            <div style={{ display:"flex", background:"rgba(255,255,255,0.05)", borderRadius:10, padding:3, gap:2, marginBottom:20 }}>
+              {[["all","All Time"],["month","This Month"],["week","This Week"],["sport","By Sport"]].map(([t, label]) => (
+                <button key={t} onClick={() => setTab(t)} style={{ flex:1, padding:"7px 4px", background:tab===t?"rgba(30,144,255,0.3)":"transparent", border:tab===t?"1px solid rgba(30,144,255,0.4)":"1px solid transparent", borderRadius:8, color:tab===t?"#e0f2fe":"rgba(255,255,255,0.35)", fontSize:10, fontWeight:tab===t?700:400, cursor:"pointer", fontFamily:"Outfit, sans-serif", letterSpacing:0.3, whiteSpace:"nowrap" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {(isOwn || profilePublic) && <div style={{ padding: "0 24px" }}>
-          {loading && <div style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", padding: 40, fontSize: 13 }}>Loading history...</div>}
-
-          {!loading && filtered.length === 0 && (
-            <div style={{ textAlign: "center", color: "rgba(255,255,255,0.25)", padding: 40, fontSize: 13 }}>No picks yet{tab !== "all" ? " for this period" : ""}</div>
-          )}
-
-          {/* Sport breakdown */}
-          {tab === "sport" && !loading && Object.entries(sportBreakdown).map(([sport, s]) => (
-            <div key={sport} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: 1 }}>{sport}</div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{s.wins}-{s.losses}{s.pushes > 0 ? `-${s.pushes}` : ""}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: s.units > 0 ? "#4ade80" : s.units < 0 ? "#f87171" : "rgba(255,255,255,0.4)" }}>{s.units > 0 ? "+" : ""}{Number(s.units.toFixed(1))}u</span>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* Pick history list */}
-          {tab !== "sport" && !loading && filtered.map(h => (
-            <div key={h.id} style={{ padding: "12px 16px", background: resultBg(h.result), border: `1px solid ${h.result ? resultColor(h.result) + "30" : "rgba(255,255,255,0.07)"}`, borderLeft: `3px solid ${resultColor(h.result)}`, borderRadius: 12, marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#e0f2fe" }}>{h.label}</div>
-                  {h.matchup && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{h.matchup}</div>}
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 4 }}>{h.date} · {h.sport?.toUpperCase()}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginLeft: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: resultColor(h.result), background: resultBg(h.result), border: `1px solid ${resultColor(h.result)}40`, borderRadius: 6, padding: "3px 8px" }}>
-                    {h.result ? h.result.toUpperCase() : "PENDING"}
+        {/* Content */}
+        {showContent && (
+          <div style={{ padding:"0 24px" }}>
+            {loading && <div style={{ textAlign:"center", color:"rgba(255,255,255,0.3)", padding:40, fontSize:13 }}>Loading...</div>}
+            {!loading && filtered.length === 0 && (
+              <div style={{ textAlign:"center", color:"rgba(255,255,255,0.25)", padding:40, fontSize:13 }}>No picks yet{tab!=="all"?" for this period":""}</div>
+            )}
+            {tab === "sport" && !loading && Object.entries(sportMap).map(([sport, s]) => (
+              <div key={sport} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"14px 16px", marginBottom:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#fff", textTransform:"uppercase", letterSpacing:1 }}>{sport}</div>
+                  <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{s.wins}-{s.losses}{s.pushes>0?`-${s.pushes}`:""}</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:s.units>0?"#4ade80":s.units<0?"#f87171":"rgba(255,255,255,0.4)" }}>{s.units>0?"+":""}{Number(s.units.toFixed(1))}u</span>
                   </div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{h.units || 1}u {h.units_result !== null && h.units_result !== undefined ? `→ ${h.units_result > 0 ? "+" : ""}${Number(h.units_result.toFixed(1))}` : ""}</div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>}
+            ))}
+            {tab !== "sport" && !loading && filtered.map(h => (
+              <div key={h.id} style={{ padding:"12px 16px", background:rb(h.result), border:`1px solid ${h.result?rc(h.result)+"30":"rgba(255,255,255,0.07)"}`, borderLeft:`3px solid ${rc(h.result)}`, borderRadius:12, marginBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:"#e0f2fe" }}>{h.label}</div>
+                    {h.matchup && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:2 }}>{h.matchup}</div>}
+                    <div style={{ fontSize:10, color:"rgba(255,255,255,0.2)", marginTop:4 }}>{h.date} · {h.sport?.toUpperCase()}</div>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, marginLeft:12 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:rc(h.result), background:rb(h.result), border:`1px solid ${rc(h.result)}40`, borderRadius:6, padding:"3px 8px" }}>
+                      {h.result ? h.result.toUpperCase() : "PENDING"}
+                    </div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>
+                      {h.units||1}u{h.units_result!=null ? ` → ${h.units_result>0?"+":""}${Number(h.units_result.toFixed(1))}` : ""}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
-  </div>
+    </div>
   );
 }
 
