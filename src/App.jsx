@@ -531,8 +531,6 @@ function ProfilePage({ username, history, loading, isOwn, profilePublic, onToggl
               <div style={{ fontSize: 28, fontWeight: 800, color: unitsNet > 0 ? "#4ade80" : unitsNet < 0 ? "#f87171" : "rgba(255,255,255,0.5)", letterSpacing: -1 }}>{unitsNet > 0 ? "+" : ""}{Number(unitsNet.toFixed(1))}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{graded.length} graded · {pending.length} pending</div>
             </div>
-          </div>
-
           </div>}
 
           {/* Tabs */}
