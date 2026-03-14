@@ -1802,6 +1802,7 @@ export default function App() {
                               .find(k => selectedPicks[k]);
                             if (!activeKey) return null;
                             return (
+                              <>
                               <div style={{ marginTop: 4 }}>
                                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "rgba(255,255,255,0.15)" }}>(optional)</span></div>
                                 <input
@@ -1813,7 +1814,6 @@ export default function App() {
                                   style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
                                 />
                               </div>
-                              {/* Units selector */}
                               <div style={{ marginTop: 10 }}>
                                 <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
                                 <div style={{ display: "flex", gap: 6 }}>
@@ -1827,6 +1827,7 @@ export default function App() {
                                   })}
                                 </div>
                               </div>
+                              </>
                             );
                           })()}
                         </div>
