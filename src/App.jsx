@@ -1322,6 +1322,14 @@ export default function App() {
         if (rowsWithIds.length > 0) {
           const { error: histErr } = await supabase.from("pick_history").upsert(rowsWithIds, { onConflict: "user_id,date,pick_key" });
           if (histErr) console.error("[LockIn] pick_history upsert error:", histErr.message);
+          else {
+            // Refresh profile history if it's currently open
+            if (showProfile) {
+              const viewingUser = profileUser || username;
+              if (viewingUser === username) loadPickHistory(username);
+              else if (profilePublic) loadProfileHistory(viewingUser);
+            }
+          }
         }
       }
     }
