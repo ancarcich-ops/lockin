@@ -1,0 +1,17 @@
+{
+  "name": "Lock In",
+  "short_name": "Lock In",
+  "description": "Lock In - Sports Pick App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
