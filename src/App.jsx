@@ -581,9 +581,10 @@ function ProfilePage({ username, history, loading, isOwn, profilePublic, onToggl
               </div>
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     </div>
+  </div>
   );
 }
 
