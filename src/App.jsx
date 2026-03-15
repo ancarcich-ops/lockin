@@ -30,18 +30,24 @@ const SAMPLE_GAMES = [
 ];
 
 const BET_TYPES = {
-  spread_away: (g) => ({ label: g.away, line: g.spread.away }),
-  spread_home: (g) => ({ label: g.home, line: g.spread.home }),
-  over:        (g) => ({ label: "Over",  line: g.total }),
-  under:       (g) => ({ label: "Under", line: g.total }),
-  ml_away:     (g) => ({ label: g.away,  line: `ML ${g.ml.away}` }),
-  ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}` }),
+  spread_away:    (g) => ({ label: g.away, line: g.spread.away }),
+  spread_home:    (g) => ({ label: g.home, line: g.spread.home }),
+  over:           (g) => ({ label: "Over",  line: g.total }),
+  under:          (g) => ({ label: "Under", line: g.total }),
+  ml_away:        (g) => ({ label: g.away,  line: `ML ${g.ml.away}` }),
+  ml_home:        (g) => ({ label: g.home,  line: `ML ${g.ml.home}` }),
+  h1_spread_away: (g) => ({ label: g.away, line: g.h1?.spread?.away || "N/A" }),
+  h1_spread_home: (g) => ({ label: g.home, line: g.h1?.spread?.home || "N/A" }),
+  h1_over:        (g) => ({ label: "1H Over",  line: g.h1?.total || "N/A" }),
+  h1_under:       (g) => ({ label: "1H Under", line: g.h1?.total || "N/A" }),
 };
 
 const OPPOSITES = {
   spread_away: "spread_home", spread_home: "spread_away",
   over: "under", under: "over",
   ml_away: "ml_home", ml_home: "ml_away",
+  h1_spread_away: "h1_spread_home", h1_spread_home: "h1_spread_away",
+  h1_over: "h1_under", h1_under: "h1_over",
 };
 
 const TODAY_LABEL = new Date().toLocaleDateString("en-US", {
@@ -426,59 +432,58 @@ function LogoIcon({ isAdmin, size = 32 }) {
 
 
 // ─── RECORD DETAIL MODAL ──────────────────────────────────────────────────────
-function RecordDetailModal({ scope, allPicks, playResults, games, onClose }) {
-  // Build breakdown by agreement level using pick_history + group_results
-  // We reconstruct from allPlays logic: for each graded result, count how many people agreed
-  const getLabel = (key) => {
-    const [gid, bt] = key.split("__");
-    const g = games.find(x => x.id === gid);
-    if (!g) return key;
-    const BT = {
-      spread_away: (g) => `${g.away} ${g.spread.away}`,
-      spread_home: (g) => `${g.home} ${g.spread.home}`,
-      over: (g) => `Over ${g.total}`,
-      under: (g) => `Under ${g.total}`,
-      ml_away: (g) => `${g.away} ML`,
-      ml_home: (g) => `${g.home} ML`,
-    };
-    return BT[bt]?.(g) || key;
-  };
-
+function RecordDetailModal({ scope, allPicks, playResults, allTimeHistory, onClose }) {
   const OPPOSITES = {
     spread_away:"spread_home", spread_home:"spread_away",
     over:"under", under:"over", ml_away:"ml_home", ml_home:"ml_away"
   };
 
-  // For each graded play, figure out how many people agreed
-  const tiers = {}; // { 2: [{key, label, result, agreers}], 3: [...], ... }
-  const gradedKeys = Object.entries(playResults).filter(([k, r]) => r && !k.startsWith("__"));
+  // Build tiers from today's playResults + allPicks
+  function buildTodayTiers() {
+    const tiers = {};
+    const gradedKeys = Object.entries(playResults).filter(([k, r]) => r && !k.startsWith("__"));
+    gradedKeys.forEach(([key, result]) => {
+      const bt = key.split("__")[1];
+      const agreers = Object.values(allPicks).filter(p => p.selections?.[key]).length;
+      if (agreers < 2) return;
+      if (!tiers[agreers]) tiers[agreers] = { wins:0, losses:0, pushes:0 };
+      if (result === "win") tiers[agreers].wins++;
+      else if (result === "loss") tiers[agreers].losses++;
+      else if (result === "push") tiers[agreers].pushes++;
+    });
+    return tiers;
+  }
 
-  gradedKeys.forEach(([key, result]) => {
-    const oppKey = key.split("__")[0] + "__" + OPPOSITES[key.split("__")[1]];
-    const agreers = Object.values(allPicks).filter(p => p.selections?.[key]).length;
-    const dissenters = Object.values(allPicks).filter(p => p.selections?.[oppKey]).length;
-    if (agreers < 2) return; // not a group play
+  // Build tiers from all-time pick_history
+  // Group by pick_key + date, count unique users per play, use stored result
+  function buildAllTimeTiers() {
+    const tiers = {};
+    if (!allTimeHistory || allTimeHistory.length === 0) return tiers;
+    // Group by date+pick_key to count agreers
+    const playMap = {};
+    allTimeHistory.forEach(h => {
+      if (!h.result) return;
+      const pk = `${h.date}__${h.pick_key}`;
+      if (!playMap[pk]) playMap[pk] = { result: h.result, count: 0 };
+      playMap[pk].count++;
+    });
+    Object.values(playMap).forEach(({ result, count }) => {
+      if (count < 2) return;
+      if (!tiers[count]) tiers[count] = { wins:0, losses:0, pushes:0 };
+      if (result === "win") tiers[count].wins++;
+      else if (result === "loss") tiers[count].losses++;
+      else if (result === "push") tiers[count].pushes++;
+    });
+    return tiers;
+  }
 
-    // Get stored label from first person who had it
-    const stored = Object.values(allPicks).find(p => p.selections?.[key])?.selections?.[key];
-    const label = stored?.label ? `${stored.label} ${stored.line}` : getLabel(key);
-
-    const tier = agreers;
-    if (!tiers[tier]) tiers[tier] = [];
-    tiers[tier].push({ key, label, result, agreers, dissenters });
-  });
-
-  // Build summary per tier
+  const tiers = scope === "alltime" ? buildAllTimeTiers() : buildTodayTiers();
   const tierSummary = Object.entries(tiers)
-    .map(([tier, plays]) => {
-      const wins = plays.filter(p => p.result === "win").length;
-      const losses = plays.filter(p => p.result === "loss").length;
-      const pushes = plays.filter(p => p.result === "push").length;
-      return { tier: Number(tier), plays, wins, losses, pushes };
-    })
+    .map(([tier, s]) => ({ tier: Number(tier), ...s }))
     .sort((a, b) => b.tier - a.tier);
 
-  const rc = (r) => r==="win"?"#4ade80":r==="loss"?"#f87171":r==="push"?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.2)";
+  const isToday = scope === "today";
+  const title = isToday ? "Today" : "All Time";
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
@@ -489,56 +494,48 @@ function RecordDetailModal({ scope, allPicks, playResults, games, onClose }) {
         <div style={{padding:"20px 24px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
             <div>
-              <div style={{fontSize:20,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>Record Breakdown</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3}}>By agreement level</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>{title} Breakdown</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3}}>Record by agreement level</div>
             </div>
-            <button onClick={onClose} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"rgba(255,255,255,0.4)",fontSize:18,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,color:"rgba(255,255,255,0.4)",fontSize:18,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>x</button>
           </div>
 
           {tierSummary.length === 0 && (
             <div style={{textAlign:"center",color:"rgba(255,255,255,0.25)",padding:"40px 0",fontSize:13}}>No graded plays yet</div>
           )}
 
-          {tierSummary.map(({ tier, plays, wins, losses, pushes }) => {
+          {tierSummary.map(({ tier, wins, losses, pushes }) => {
             const total = wins + losses + pushes;
             const pct = total > 0 ? Math.round((wins / (wins + losses || 1)) * 100) : null;
             const tierColor = tier >= 5 ? "#facc15" : tier >= 3 ? "#fb923c" : "#bae6fd";
             return (
-              <div key={tier} style={{marginBottom:20}}>
-                {/* Tier header */}
+              <div key={tier} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"16px 18px",marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{fontSize:22,fontWeight:800,color:tierColor,lineHeight:1}}>{tier}</div>
+                    <div style={{fontSize:26,fontWeight:800,color:tierColor,lineHeight:1,minWidth:28}}>{tier}</div>
                     <div>
-                      <div style={{fontSize:12,fontWeight:700,color:tierColor}}>agree{tier !== 1 ? "s" : ""}</div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>{total} play{total !== 1 ? "s" : ""}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:tierColor}}>agree{tier !== 1?"s":""}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>{total} play{total!==1?"s":""}</div>
                     </div>
                   </div>
-                  <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-                    <span style={{fontSize:22,fontWeight:800,color:"#fff"}}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</span>
-                    {pct !== null && <span style={{fontSize:12,fontWeight:600,color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)"}}>{pct}%</span>}
+                  <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+                    <span style={{fontSize:24,fontWeight:800,color:"#fff",letterSpacing:-0.5}}>{wins}-{losses}{pushes>0?`-${pushes}`:""}</span>
+                    {pct!==null&&<span style={{fontSize:13,fontWeight:600,color:wins>losses?"#4ade80":losses>wins?"#f87171":"rgba(255,255,255,0.4)"}}>{pct}%</span>}
                   </div>
                 </div>
-                {/* Progress bar */}
-                {total > 0 && (
-                  <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.08)",overflow:"hidden",display:"flex",marginBottom:10}}>
-                    <div style={{width:`${(wins/total)*100}%`,background:"linear-gradient(90deg,#4ade80,#86efac)",transition:"width 0.4s"}} />
-                    <div style={{width:`${(pushes/total)*100}%`,background:"rgba(255,255,255,0.2)"}} />
-                    <div style={{width:`${(losses/total)*100}%`,background:"linear-gradient(90deg,#f87171,#fca5a5)"}} />
-                  </div>
-                )}
-                {/* Individual plays */}
-                {plays.map(p => (
-                  <div key={p.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(255,255,255,0.03)",border:`1px solid rgba(255,255,255,0.06)`,borderLeft:`3px solid ${rc(p.result)}`,borderRadius:10,marginBottom:6}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:"#e0f2fe"}}>{p.label}</div>
-                      {p.dissenters > 0 && <div style={{fontSize:10,color:"rgba(253,164,175,0.6)",marginTop:2}}>{p.dissenters} dissent{p.dissenters !== 1 ? "s" : ""}</div>}
+                <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,0.07)",overflow:"hidden",display:"flex"}}>
+                  <div style={{width:`${total>0?(wins/total)*100:0}%`,background:"linear-gradient(90deg,#4ade80,#86efac)",transition:"width 0.4s"}} />
+                  <div style={{width:`${total>0?(pushes/total)*100:0}%`,background:"rgba(255,255,255,0.2)"}} />
+                  <div style={{width:`${total>0?(losses/total)*100:0}%`,background:"linear-gradient(90deg,#f87171,#fca5a5)"}} />
+                </div>
+                <div style={{display:"flex",gap:12,marginTop:10}}>
+                  {[["W",wins,"rgba(74,222,128,0.15)","#4ade80"],["L",losses,"rgba(248,113,113,0.15)","#f87171"],["P",pushes,"rgba(255,255,255,0.08)","rgba(255,255,255,0.4)"]].map(([lbl,val,bg,col])=>(
+                    <div key={lbl} style={{background:bg,borderRadius:8,padding:"6px 14px",textAlign:"center",minWidth:44}}>
+                      <div style={{fontSize:16,fontWeight:800,color:col,lineHeight:1}}>{val}</div>
+                      <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:1.5,marginTop:2}}>{lbl}</div>
                     </div>
-                    <div style={{fontSize:11,fontWeight:700,color:rc(p.result),background:p.result==="win"?"rgba(74,222,128,0.1)":p.result==="loss"?"rgba(248,113,113,0.1)":"rgba(255,255,255,0.06)",border:`1px solid ${rc(p.result)}40`,borderRadius:6,padding:"3px 8px"}}>
-                      {p.result ? p.result.toUpperCase() : "PENDING"}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             );
           })}
@@ -547,6 +544,7 @@ function RecordDetailModal({ scope, allPicks, playResults, games, onClose }) {
     </div>
   );
 }
+
 
 // ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
 function ProfilePage({ username, history, loading, isOwn, profilePublic, onTogglePublic, onClose, tab, setTab }) {
@@ -1013,7 +1011,7 @@ export default function App() {
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h,spreads_h1,totals_h1&oddsFormat=american&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -1022,6 +1020,8 @@ export default function App() {
           const h2h = g.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
           const spreads = g.bookmakers?.[0]?.markets?.find(m => m.key === "spreads");
           const totals = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals");
+          const spreads_h1 = g.bookmakers?.[0]?.markets?.find(m => m.key === "spreads_h1");
+          const totals_h1 = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals_h1");
           const awayTeam = g.away_team;
           const homeTeam = g.home_team;
           const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
@@ -1030,6 +1030,9 @@ export default function App() {
           const over = totals?.outcomes?.find(o => o.name === "Over");
           const awayML = h2h?.outcomes?.find(o => o.name === awayTeam);
           const homeML = h2h?.outcomes?.find(o => o.name === homeTeam);
+          const awayH1Spread = spreads_h1?.outcomes?.find(o => o.name === awayTeam);
+          const homeH1Spread = spreads_h1?.outcomes?.find(o => o.name === homeTeam);
+          const overH1 = totals_h1?.outcomes?.find(o => o.name === "Over");
           allGames.push({
             id: g.id,
             away: awayTeam,
@@ -1044,6 +1047,13 @@ export default function App() {
               away: awayML ? (awayML.price > 0 ? `+${awayML.price}` : `${awayML.price}`) : "N/A",
               home: homeML ? (homeML.price > 0 ? `+${homeML.price}` : `${homeML.price}`) : "N/A",
             },
+            h1: spreads_h1 || totals_h1 ? {
+              spread: {
+                away: awayH1Spread ? (awayH1Spread.point > 0 ? `+${awayH1Spread.point}` : `${awayH1Spread.point}`) : null,
+                home: homeH1Spread ? (homeH1Spread.point > 0 ? `+${homeH1Spread.point}` : `${homeH1Spread.point}`) : null,
+              },
+              total: overH1 ? `${overH1.point}` : null,
+            } : null,
           });
         });
       }
@@ -1254,12 +1264,16 @@ export default function App() {
           const game = currentGames.find(g => g.id === gid);
           if (game) {
             const BT = {
-              spread_away: (g) => `${g.away} ${g.spread.away}`,
-              spread_home: (g) => `${g.home} ${g.spread.home}`,
-              over: (g) => `Over ${g.total}`,
-              under: (g) => `Under ${g.total}`,
-              ml_away: (g) => `${g.away} ML`,
-              ml_home: (g) => `${g.home} ML`,
+              spread_away:    (g) => `${g.away} ${g.spread.away}`,
+              spread_home:    (g) => `${g.home} ${g.spread.home}`,
+              over:           (g) => `Over ${g.total}`,
+              under:          (g) => `Under ${g.total}`,
+              ml_away:        (g) => `${g.away} ML`,
+              ml_home:        (g) => `${g.home} ML`,
+              h1_spread_away: (g) => `${g.away} 1H ${g.h1?.spread?.away || ""}`,
+              h1_spread_home: (g) => `${g.home} 1H ${g.h1?.spread?.home || ""}`,
+              h1_over:        (g) => `1H Over ${g.h1?.total || ""}`,
+              h1_under:       (g) => `1H Under ${g.h1?.total || ""}`,
             };
             label = BT[bt]?.(game) || key;
           } else {
@@ -1365,12 +1379,16 @@ export default function App() {
       const [gid, bt] = key.split("__");
       const game = games.find(g => g.id === gid);
       const BT = {
-        spread_away: (g) => ({ label: g.away, line: g.spread.away, matchup: `${g.away} @ ${g.home}` }),
-        spread_home: (g) => ({ label: g.home, line: g.spread.home, matchup: `${g.away} @ ${g.home}` }),
-        over:        (g) => ({ label: "Over",  line: g.total,        matchup: `${g.away} @ ${g.home}` }),
-        under:       (g) => ({ label: "Under", line: g.total,        matchup: `${g.away} @ ${g.home}` }),
-        ml_away:     (g) => ({ label: g.away,  line: `ML ${g.ml.away}`, matchup: `${g.away} @ ${g.home}` }),
-        ml_home:     (g) => ({ label: g.home,  line: `ML ${g.ml.home}`, matchup: `${g.away} @ ${g.home}` }),
+        spread_away:    (g) => ({ label: g.away, line: g.spread.away, matchup: `${g.away} @ ${g.home}` }),
+        spread_home:    (g) => ({ label: g.home, line: g.spread.home, matchup: `${g.away} @ ${g.home}` }),
+        over:           (g) => ({ label: "Over",  line: g.total,        matchup: `${g.away} @ ${g.home}` }),
+        under:          (g) => ({ label: "Under", line: g.total,        matchup: `${g.away} @ ${g.home}` }),
+        ml_away:        (g) => ({ label: g.away,  line: `ML ${g.ml.away}`, matchup: `${g.away} @ ${g.home}` }),
+        ml_home:        (g) => ({ label: g.home,  line: `ML ${g.ml.home}`, matchup: `${g.away} @ ${g.home}` }),
+        h1_spread_away: (g) => ({ label: `${g.away} 1H`, line: g.h1?.spread?.away || "N/A", matchup: `${g.away} @ ${g.home}` }),
+        h1_spread_home: (g) => ({ label: `${g.home} 1H`, line: g.h1?.spread?.home || "N/A", matchup: `${g.away} @ ${g.home}` }),
+        h1_over:        (g) => ({ label: "1H Over",  line: g.h1?.total || "N/A", matchup: `${g.away} @ ${g.home}` }),
+        h1_under:       (g) => ({ label: "1H Under", line: g.h1?.total || "N/A", matchup: `${g.away} @ ${g.home}` }),
       };
       const base = game ? BT[bt]?.(game) || {} : {};
       enriched[key] = { ...base, ...(pickNotes[key] ? { note: pickNotes[key].trim() } : {}), units: pickUnits[key] || 1 };
@@ -1941,7 +1959,7 @@ export default function App() {
                       </div>
                       {isOpen && (
                         <div style={{ padding: "16px 18px 18px" }} className="expand">
-                          {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]],["Moneyline",["ml_away","ml_home"]]].map(([catLabel, types]) => (
+                          {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]],["Moneyline",["ml_away","ml_home"]],["1H Spread",["h1_spread_away","h1_spread_home"]],["1H Total",["h1_over","h1_under"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
                             <div key={catLabel} style={{ marginBottom: 14 }}>
                               <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(30,144,255,0.8)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>{catLabel}</div>
                               <div style={{ display: "flex", gap: 8 }}>
@@ -1961,7 +1979,7 @@ export default function App() {
                           ))}
                           {/* Note field - only show if this game has an active pick */}
                           {(() => {
-                            const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
+                            const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home","h1_spread_away","h1_spread_home","h1_over","h1_under"]
                               .map(bt => `${game.id}__${bt}`)
                               .find(k => selectedPicks[k]);
                             if (!activeKey) return null;
@@ -2059,7 +2077,7 @@ export default function App() {
                   </div>
 
                   {/* All-time */}
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); }}>
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); supabase.from("pick_history").select("date,pick_key,result").not("result","is",null).then(({data})=>{ if(data) setAllTimeHistory(data); }); }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3 }}>All Time</div>
