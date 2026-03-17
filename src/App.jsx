@@ -2512,25 +2512,8 @@ export default function App() {
     </div>
   );
 
-  // ── Group setup screen — shown when user has no groups yet
-  if (session && username && groupSetupDone && myGroups.length === 0 && !showCreateGroup && !showJoinGroup) {
-    return (
-      <div style={{ minHeight:"100vh", background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-        <div style={{ textAlign:"center", maxWidth:340, width:"100%" }}>
-          <div style={{ fontSize:48, marginBottom:16 }}>🎯</div>
-          <div style={{ fontSize:26, fontWeight:800, color:"#fff", letterSpacing:-0.5, marginBottom:8 }}>Welcome to Lock In</div>
-          <div style={{ fontSize:14, color:"rgba(255,255,255,0.4)", marginBottom:32, lineHeight:1.6 }}>Create a group for your crew or join one with an invite code.</div>
-          <button onClick={() => setShowCreateGroup(true)} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:12 }}>
-            Create a Group
-          </button>
-          <button onClick={() => setShowJoinGroup(true)} style={{ width:"100%", padding:"15px 0", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:14, color:"rgba(255,255,255,0.6)", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>
-            Join with a Code
-          </button>
-          <button onClick={() => supabase.auth.signOut()} style={{ marginTop:20, background:"none", border:"none", color:"rgba(255,255,255,0.2)", fontSize:12, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Sign out</button>
-        </div>
-      </div>
-    );
-  }
+  // ── Group setup screen — shown when user has no groups yet (rendered as overlay)
+  const showNoGroupsScreen = session && username && groupSetupDone && myGroups.length === 0;
 
   if (session && username && showCreateGroup) {
     return (
@@ -2554,27 +2537,7 @@ export default function App() {
     );
   }
 
-  if (session && username && showJoinGroup) {
-    return (
-      <div style={{ minHeight:"100vh", background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-        <div style={{ maxWidth:340, width:"100%" }}>
-          <button onClick={() => { setShowJoinGroup(false); setGroupError(""); }} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.3)", fontSize:13, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:24, display:"flex", alignItems:"center", gap:6 }}>← Back</button>
-          <div style={{ fontSize:22, fontWeight:800, color:"#fff", marginBottom:6 }}>Join a Group</div>
-          <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:24 }}>Enter the 6-character invite code from your group.</div>
-          <input
-            type="text" maxLength={6} placeholder="e.g. OGCREW"
-            value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key==="Enter" && joinGroup(joinCode)}
-            style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"14px 16px", color:"#fff", fontSize:20, fontWeight:700, letterSpacing:6, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:12, boxSizing:"border-box", textTransform:"uppercase" }}
-          />
-          {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
-          <button onClick={() => joinGroup(joinCode)} disabled={groupLoading} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", opacity:groupLoading?0.6:1 }}>
-            {groupLoading ? "Joining..." : "Join Group"}
-          </button>
-        </div>
-      </div>
-    );
-  }
+
 
   if (loading) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0d0b1e" }}>
@@ -2588,6 +2551,20 @@ export default function App() {
       <style>{CSS}</style>
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
 
+
+      {/* ── NO GROUPS WELCOME SCREEN ── */}
+      {showNoGroupsScreen && !showCreateGroup && !showJoinGroup && (
+        <div style={{ position:"fixed", inset:0, zIndex:400, background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ textAlign:"center", maxWidth:340, width:"100%" }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>🎯</div>
+            <div style={{ fontSize:26, fontWeight:800, color:"#fff", letterSpacing:-0.5, marginBottom:8 }}>Welcome to Lock In</div>
+            <div style={{ fontSize:14, color:"rgba(255,255,255,0.4)", marginBottom:32, lineHeight:1.6 }}>Create a group for your crew or join one with an invite code.</div>
+            <button onClick={() => setShowCreateGroup(true)} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:12 }}>Create a Group</button>
+            <button onClick={() => setShowJoinGroup(true)} style={{ width:"100%", padding:"15px 0", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:14, color:"rgba(255,255,255,0.6)", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Join with a Code</button>
+            <button onClick={() => supabase.auth.signOut()} style={{ marginTop:20, background:"none", border:"none", color:"rgba(255,255,255,0.2)", fontSize:12, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Sign out</button>
+          </div>
+        </div>
+      )}
 
       {/* ── GROUP SWITCHER ── */}
       {showGroupSwitcher && (
