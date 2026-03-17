@@ -1416,6 +1416,18 @@ export default function App() {
   const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
 
+  // Groups
+  const [activeGroup, setActiveGroup]           = useState(null); // { id, name, invite_code, role }
+  const [myGroups, setMyGroups]                 = useState([]);
+  const [showGroupSwitcher, setShowGroupSwitcher] = useState(false);
+  const [showCreateGroup, setShowCreateGroup]   = useState(false);
+  const [showJoinGroup, setShowJoinGroup]       = useState(false);
+  const [groupSetupDone, setGroupSetupDone]     = useState(false); // true once groups loaded
+  const [newGroupName, setNewGroupName]         = useState("");
+  const [joinCode, setJoinCode]                 = useState("");
+  const [groupError, setGroupError]             = useState("");
+  const [groupLoading, setGroupLoading]         = useState(false);
+
   // Futures
   const [futuresPendingPick, setFuturesPendingPick] = useState(null); // { team, odds } awaiting confirm
   const [futuresNote, setFuturesNote]               = useState("");
@@ -1551,10 +1563,11 @@ export default function App() {
     if (!session && !viewerMode) return;
     if (oddsFetchedRef.current) return;
     oddsFetchedRef.current = true;
-    loadOddsFromCache();
-  }, [session, viewerMode]);
+    loadOddsFromCache(activeGroup?.id);
+  }, [session, viewerMode, activeGroup]);
 
-  async function loadOddsFromCache() {
+  async function loadOddsFromCache(gid) {
+    const groupId = gid || activeGroup?.id;
     try {
       const { data: cached } = await supabase
         .from("group_results")
@@ -1663,7 +1676,7 @@ export default function App() {
 
         setGames(mergedGames);
         await supabase.from("group_results").upsert(
-          { key: `__odds_cache__${TODAY_DATE}`, result: JSON.stringify(mergedGames), date: TODAY_DATE },
+          { key: `__odds_cache__${TODAY_DATE}`, result: JSON.stringify(mergedGames), date: TODAY_DATE, group_id: activeGroup?.id || null },
           { onConflict: "key,date" }
         );
       }
@@ -1679,18 +1692,18 @@ export default function App() {
   useEffect(() => {
     if (viewerMode) { loadData(null); return; }
     if (!session || !username) return;
-    loadData(username);
-  }, [session, username, viewerMode]);
+    if (activeGroup) loadData(username, activeGroup.id);
+  }, [session, username, viewerMode, activeGroup]);
 
-  async function loadData(activeUsername) {
+  async function loadData(activeUsername, gid) {
     const uname = activeUsername || username;
+    const groupId = gid || activeGroup?.id;
     if (!uname && !viewerMode) { setLoading(false); return; }
     setLoading(true);
     try {
-    const { data: picksRows } = await supabase
-      .from("picks")
-      .select("username, selections, is_public, user_id")
-      .eq("date", TODAY_DATE);
+    let picksQuery = supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE);
+    if (groupId) picksQuery = picksQuery.eq("group_id", groupId);
+    const { data: picksRows } = await picksQuery;
 
     if (picksRows) {
       const built = {};
@@ -1709,10 +1722,9 @@ export default function App() {
     }
 
     // Load results for today
-    const { data: resultsRows } = await supabase
-      .from("group_results")
-      .select("key, result")
-      .eq("date", TODAY_DATE);
+    let resultsQuery = supabase.from("group_results").select("key, result").eq("date", TODAY_DATE);
+    if (groupId) resultsQuery = resultsQuery.eq("group_id", groupId);
+    const { data: resultsRows } = await resultsQuery;
 
     if (resultsRows) {
       const built = {};
@@ -1724,10 +1736,9 @@ export default function App() {
     }
 
     // Load all-time record - only rows with graded results
-    const { data: allResultsRows } = await supabase
-      .from("group_results")
-      .select("result")
-      .in("result", ["win", "loss", "push"]);
+    let allTimeQuery2 = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    if (activeGroup?.id) allTimeQuery2 = allTimeQuery2.eq("group_id", activeGroup.id);
+    const { data: allResultsRows } = await allTimeQuery2;
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
@@ -2033,7 +2044,9 @@ export default function App() {
     const prev = playResults[key];
     const isClear = result === null || prev === result;
     if (isClear) {
-      await supabase.from("group_results").delete().eq("key", key).eq("date", TODAY_DATE);
+      let delQuery = supabase.from("group_results").delete().eq("key", key).eq("date", TODAY_DATE);
+      if (activeGroup?.id) delQuery = delQuery.eq("group_id", activeGroup.id);
+      await delQuery;
       // Clear result in pick_history for all users who had this pick
       await supabase.from("pick_history").update({ result: null, units_result: null }).eq("pick_key", key).eq("date", TODAY_DATE);
       const next = { ...playResults };
@@ -2041,7 +2054,7 @@ export default function App() {
       setPlayResults(next);
       recomputeRecord(next);
     } else {
-      await supabase.from("group_results").upsert({ key, result, date: TODAY_DATE }, { onConflict: "key,date" });
+      await supabase.from("group_results").upsert({ key, result, date: TODAY_DATE, group_id: activeGroup?.id || null }, { onConflict: "key,date" });
       const next = { ...playResults, [key]: result };
       setPlayResults(next);
       recomputeRecord(next);
@@ -2131,10 +2144,9 @@ export default function App() {
       try { setFuturesTeams(JSON.parse(cached.result)); } catch(e) {}
     }
     // Load all futures picks
-    const { data: picks } = await supabase
-      .from("futures_picks")
-      .select("username, team, odds, result, user_id")
-      .order("created_at", { ascending: true });
+    let fpQuery = supabase.from("futures_picks").select("username, team, odds, note, result, user_id").order("created_at", { ascending: true });
+    if (activeGroup?.id) fpQuery = fpQuery.eq("group_id", activeGroup.id);
+    const { data: picks } = await fpQuery;
     if (picks) {
       setFuturesPicks(picks);
       setMyFuturesPicks(picks.filter(p => p.username === username));
@@ -2214,6 +2226,7 @@ export default function App() {
       team,
       odds,
       note: note?.trim() || null,
+      group_id: activeGroup?.id || null,
     });
     if (!error) {
       const newPick = { user_id: profile.id, username, team, odds, note: note?.trim() || null, result: null };
@@ -2229,6 +2242,73 @@ export default function App() {
     await supabase.from("futures_picks").update({ result }).eq("team", team);
     setFuturesPicks(prev => prev.map(p => p.team === team ? { ...p, result } : p));
     setMyFuturesPicks(prev => prev.map(p => p.team === team ? { ...p, result } : p));
+  }
+
+  // ── Groups ───────────────────────────────────────────────────────────────────
+  async function loadMyGroups(uid) {
+    const { data } = await supabase
+      .from("group_members")
+      .select("role, groups(id, name, invite_code)")
+      .eq("user_id", uid);
+    if (data && data.length > 0) {
+      const groups = data.map(d => ({ ...d.groups, role: d.role }));
+      setMyGroups(groups);
+      // Load last used group from localStorage
+      const lastId = localStorage.getItem("lockin_active_group");
+      const last = groups.find(g => g.id === lastId) || groups[0];
+      setActiveGroup(last);
+      setGroupSetupDone(true);
+      return last;
+    }
+    setGroupSetupDone(true);
+    return null;
+  }
+
+  async function createGroup(name) {
+    if (!name.trim()) { setGroupError("Enter a group name"); return; }
+    setGroupLoading(true); setGroupError("");
+    // Generate unique 6-char code
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    const { data: grp, error } = await supabase.from("groups").insert({
+      name: name.trim(), invite_code: code, created_by: session.user.id
+    }).select().single();
+    if (error) { setGroupError("Something went wrong"); setGroupLoading(false); return; }
+    await supabase.from("group_members").insert({ group_id: grp.id, user_id: session.user.id, role: "admin" });
+    const newGroup = { ...grp, role: "admin" };
+    setMyGroups(prev => [...prev, newGroup]);
+    switchGroup(newGroup);
+    setShowCreateGroup(false); setNewGroupName(""); setGroupLoading(false);
+  }
+
+  async function joinGroup(code) {
+    if (!code.trim()) { setGroupError("Enter an invite code"); return; }
+    setGroupLoading(true); setGroupError("");
+    const { data: grp } = await supabase.from("groups").select("*").eq("invite_code", code.trim().toUpperCase()).maybeSingle();
+    if (!grp) { setGroupError("Invalid code — check and try again"); setGroupLoading(false); return; }
+    // Check already a member
+    const { data: existing } = await supabase.from("group_members").select("group_id").eq("group_id", grp.id).eq("user_id", session.user.id).maybeSingle();
+    if (existing) { setGroupError("You're already in this group"); setGroupLoading(false); return; }
+    await supabase.from("group_members").insert({ group_id: grp.id, user_id: session.user.id, role: "member" });
+    const joined = { ...grp, role: "member" };
+    setMyGroups(prev => [...prev, joined]);
+    switchGroup(joined);
+    setShowJoinGroup(false); setJoinCode(""); setGroupLoading(false);
+  }
+
+  function switchGroup(group) {
+    setActiveGroup(group);
+    localStorage.setItem("lockin_active_group", group.id);
+    setShowGroupSwitcher(false);
+    // Reset daily state
+    setAllPicks({}); setMyPicks(null); setSelectedPicks({});
+    setPlayResults({}); setGames([]); setRecord({ wins:0,losses:0,pushes:0 });
+    setAllTimeRecord({ wins:0,losses:0,pushes:0 });
+    setFuturesPicks([]); setMyFuturesPicks([]); setFuturesTeams([]);
+    oddsFetchedRef.current = false;
+    loadData(username, group.id);
+    loadOddsFromCache(group.id);
   }
 
   // ── Player profile opener ───────────────────────────────────────────────────
@@ -2432,6 +2512,70 @@ export default function App() {
     </div>
   );
 
+  // ── Group setup screen — shown when user has no groups yet
+  if (session && username && groupSetupDone && myGroups.length === 0 && !showCreateGroup && !showJoinGroup) {
+    return (
+      <div style={{ minHeight:"100vh", background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ textAlign:"center", maxWidth:340, width:"100%" }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>🎯</div>
+          <div style={{ fontSize:26, fontWeight:800, color:"#fff", letterSpacing:-0.5, marginBottom:8 }}>Welcome to Lock In</div>
+          <div style={{ fontSize:14, color:"rgba(255,255,255,0.4)", marginBottom:32, lineHeight:1.6 }}>Create a group for your crew or join one with an invite code.</div>
+          <button onClick={() => setShowCreateGroup(true)} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:12 }}>
+            Create a Group
+          </button>
+          <button onClick={() => setShowJoinGroup(true)} style={{ width:"100%", padding:"15px 0", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:14, color:"rgba(255,255,255,0.6)", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>
+            Join with a Code
+          </button>
+          <button onClick={() => supabase.auth.signOut()} style={{ marginTop:20, background:"none", border:"none", color:"rgba(255,255,255,0.2)", fontSize:12, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (session && username && showCreateGroup) {
+    return (
+      <div style={{ minHeight:"100vh", background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ maxWidth:340, width:"100%" }}>
+          <button onClick={() => { setShowCreateGroup(false); setGroupError(""); }} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.3)", fontSize:13, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:24, display:"flex", alignItems:"center", gap:6 }}>← Back</button>
+          <div style={{ fontSize:22, fontWeight:800, color:"#fff", marginBottom:6 }}>Create a Group</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:24 }}>You'll get a unique invite code to share with your crew.</div>
+          <input
+            type="text" maxLength={32} placeholder="Group name (e.g. The Boys)"
+            value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+            onKeyDown={e => e.key==="Enter" && createGroup(newGroupName)}
+            style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"14px 16px", color:"#fff", fontSize:15, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:12, boxSizing:"border-box" }}
+          />
+          {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
+          <button onClick={() => createGroup(newGroupName)} disabled={groupLoading} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", opacity:groupLoading?0.6:1 }}>
+            {groupLoading ? "Creating..." : "Create Group"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (session && username && showJoinGroup) {
+    return (
+      <div style={{ minHeight:"100vh", background:"#0d0b1e", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ maxWidth:340, width:"100%" }}>
+          <button onClick={() => { setShowJoinGroup(false); setGroupError(""); }} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.3)", fontSize:13, cursor:"pointer", fontFamily:"Outfit, sans-serif", marginBottom:24, display:"flex", alignItems:"center", gap:6 }}>← Back</button>
+          <div style={{ fontSize:22, fontWeight:800, color:"#fff", marginBottom:6 }}>Join a Group</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:24 }}>Enter the 6-character invite code from your group.</div>
+          <input
+            type="text" maxLength={6} placeholder="e.g. OGCREW"
+            value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key==="Enter" && joinGroup(joinCode)}
+            style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"14px 16px", color:"#fff", fontSize:20, fontWeight:700, letterSpacing:6, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:12, boxSizing:"border-box", textTransform:"uppercase" }}
+          />
+          {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
+          <button onClick={() => joinGroup(joinCode)} disabled={groupLoading} style={{ width:"100%", padding:"15px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:14, color:"#e0f2fe", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", opacity:groupLoading?0.6:1 }}>
+            {groupLoading ? "Joining..." : "Join Group"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0d0b1e" }}>
       <div style={{ fontFamily: "Outfit, sans-serif", fontSize: 14, color: "rgba(255,255,255,0.3)" }}>Loading...</div>
@@ -2445,7 +2589,63 @@ export default function App() {
       <div className="orb1" /><div className="orb2" /><div className="orb3" />
 
 
-      {/* ── RECORD DETAIL MODAL ── */}
+      {/* ── GROUP SWITCHER ── */}
+      {showGroupSwitcher && (
+        <div style={{ position:"fixed", inset:0, zIndex:400, background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }} onClick={() => setShowGroupSwitcher(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", top:56, left:16, background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.1)", borderRadius:14, padding:8, minWidth:220, boxShadow:"0 8px 32px rgba(0,0,0,0.5)" }}>
+            <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:2, textTransform:"uppercase", padding:"6px 12px 4px", fontWeight:600 }}>Your Groups</div>
+            {myGroups.map(g => (
+              <button key={g.id} onClick={() => switchGroup(g)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", background:activeGroup?.id===g.id?"rgba(30,144,255,0.2)":"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:activeGroup?.id===g.id?"#bae6fd":"#fff" }}>{g.name}</span>
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1 }}>{g.invite_code}</span>
+                </div>
+                {activeGroup?.id===g.id && <span style={{ fontSize:10, color:"#60a5fa" }}>✓</span>}
+              </button>
+            ))}
+            <div style={{ borderTop:"1px solid rgba(255,255,255,0.07)", marginTop:4, paddingTop:4 }}>
+              <button onClick={() => { setShowGroupSwitcher(false); setShowCreateGroup(true); setGroupError(""); }} style={{ width:"100%", padding:"9px 12px", background:"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif", fontSize:12, color:"rgba(30,144,255,0.8)", textAlign:"left" }}>+ Create new group</button>
+              <button onClick={() => { setShowGroupSwitcher(false); setShowJoinGroup(true); setGroupError(""); }} style={{ width:"100%", padding:"9px 12px", background:"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif", fontSize:12, color:"rgba(255,255,255,0.4)", textAlign:"left" }}>+ Join with a code</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CREATE GROUP MODAL ── */}
+      {showCreateGroup && (
+        <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(6px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowCreateGroup(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"22px 22px 0 0", width:"100%", maxWidth:520, padding:"24px 24px 40px" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"rgba(255,255,255,0.15)", margin:"0 auto 22px" }} />
+            <div style={{ fontSize:18, fontWeight:800, color:"#fff", marginBottom:6 }}>Create a Group</div>
+            <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:20 }}>You'll get a unique code to share with your crew.</div>
+            <input type="text" maxLength={32} placeholder="Group name" value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createGroup(newGroupName)} style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"13px 16px", color:"#fff", fontSize:15, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:10, boxSizing:"border-box" }} />
+            {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => { setShowCreateGroup(false); setGroupError(""); }} style={{ flex:1, padding:"13px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"rgba(255,255,255,0.5)", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Cancel</button>
+              <button onClick={() => createGroup(newGroupName)} disabled={groupLoading} style={{ flex:2, padding:"13px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:12, color:"#e0f2fe", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", opacity:groupLoading?0.6:1 }}>{groupLoading?"Creating...":"Create Group"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── JOIN GROUP MODAL ── */}
+      {showJoinGroup && (
+        <div style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(6px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowJoinGroup(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"22px 22px 0 0", width:"100%", maxWidth:520, padding:"24px 24px 40px" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"rgba(255,255,255,0.15)", margin:"0 auto 22px" }} />
+            <div style={{ fontSize:18, fontWeight:800, color:"#fff", marginBottom:6 }}>Join a Group</div>
+            <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:20 }}>Enter the 6-character invite code.</div>
+            <input type="text" maxLength={6} placeholder="e.g. OGCREW" value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&joinGroup(joinCode)} style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"13px 16px", color:"#fff", fontSize:20, fontWeight:700, letterSpacing:6, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:10, boxSizing:"border-box", textTransform:"uppercase" }} />
+            {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => { setShowJoinGroup(false); setGroupError(""); }} style={{ flex:1, padding:"13px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"rgba(255,255,255,0.5)", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Cancel</button>
+              <button onClick={() => joinGroup(joinCode)} disabled={groupLoading} style={{ flex:2, padding:"13px 0", background:"linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.3))", border:"1px solid rgba(30,144,255,0.5)", borderRadius:12, color:"#e0f2fe", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"Outfit, sans-serif", opacity:groupLoading?0.6:1 }}>{groupLoading?"Joining...":"Join Group"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RECORD DETAIL MODAL ── */}}
       {showRecordDetail && (
         <RecordDetailModal
           scope={recordDetailScope}
@@ -2563,6 +2763,19 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Invite code */}
+        {activeGroup && !viewerMode && (
+          <div style={{ padding: "6px 22px 0", maxWidth: 660, margin: "0 auto" }}>
+            <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"8px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:2, textTransform:"uppercase" }}>Invite Code</span>
+                <span style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,0.7)", letterSpacing:3 }}>{activeGroup.invite_code}</span>
+              </div>
+              <button onClick={() => navigator.clipboard.writeText(activeGroup.invite_code).then(() => {})} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy</button>
+            </div>
+          </div>
+        )}
 
         {submitters.length > 0 && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "7px 22px" }}>
