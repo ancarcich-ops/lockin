@@ -2679,12 +2679,20 @@ export default function App() {
       {/* ── NAV ── */}
       <div className="glass-nav" style={{ position: "sticky", top: 0, zIndex: 200 }}>
         <div style={{ maxWidth: 660, margin: "0 auto", padding: "0 14px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div className="logo-btn" onClick={handleLogoTap} style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <LogoIcon isAdmin={isAdmin} size={30} />
-            <div style={{ lineHeight: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: -0.3, whiteSpace: "nowrap" }}>Lock In</div>
-              {isAdmin && <div style={{ fontSize: 8, color: "rgba(251,191,36,0.7)", letterSpacing: 0.8, marginTop: 2 }}>ADMIN</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <div className="logo-btn" onClick={handleLogoTap} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <LogoIcon isAdmin={isAdmin} size={30} />
+              <div style={{ lineHeight: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: -0.3, whiteSpace: "nowrap" }}>Lock In</div>
+                {isAdmin && <div style={{ fontSize: 8, color: "rgba(251,191,36,0.7)", letterSpacing: 0.8, marginTop: 2 }}>ADMIN</div>}
+              </div>
             </div>
+            {!viewerMode && groupSetupDone && (
+              <button onClick={() => setShowGroupSwitcher(v => !v)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "Outfit, sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 10, color: activeGroup ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.3)", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeGroup ? activeGroup.name : "No Group"}</span>
+                <span style={{ fontSize: 8, color: "rgba(255,255,255,0.3)" }}>▾</span>
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
