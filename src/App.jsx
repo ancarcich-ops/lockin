@@ -2687,7 +2687,7 @@ export default function App() {
                 {isAdmin && <div style={{ fontSize: 8, color: "rgba(251,191,36,0.7)", letterSpacing: 0.8, marginTop: 2 }}>ADMIN</div>}
               </div>
             </div>
-            {!viewerMode && groupSetupDone && (
+            {!viewerMode && session && (
               <button onClick={() => setShowGroupSwitcher(v => !v)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "Outfit, sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontSize: 10, color: activeGroup ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.3)", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeGroup ? activeGroup.name : "No Group"}</span>
                 <span style={{ fontSize: 8, color: "rgba(255,255,255,0.3)" }}>▾</span>
