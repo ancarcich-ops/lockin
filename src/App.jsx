@@ -2145,20 +2145,33 @@ export default function App() {
     if (!apiKey) return;
     setFuturesOddsLoading(true);
     try {
-      // Try NCAAB championship winner market first, fall back to regular outrights
-      const sports = ["basketball_ncaab_championship_winner", "basketball_ncaab"];
-      let teams = [];
-
-      for (const sport of sports) {
-        const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american`
+      // Step 1: Discover which NCAAB futures sport keys are currently active
+      const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}&all=true`);
+      let sportKey = null;
+      if (sportsRes.ok) {
+        const sportsData = await sportsRes.json();
+        // Look for NCAAB winner/outright sport keys
+        const candidates = sportsData.filter(s =>
+          s.key.includes("ncaab") && (s.has_outrights || s.key.includes("winner") || s.key.includes("champion"))
         );
+        console.log("[LockIn] NCAAB futures candidates:", candidates.map(s => s.key + " active=" + s.active));
+        const active = candidates.find(s => s.active);
+        if (active) sportKey = active.key;
+      }
+
+      // Step 2: Fetch odds from the discovered sport key
+      let teams = [];
+      const toTry = sportKey ? [sportKey] : ["basketball_ncaab_championship_winner"];
+      for (const key of toTry) {
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${key}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american`
+        );
+        console.log(`[LockIn] futures ${key} status:`, res.status);
         if (!res.ok) continue;
         const data = await res.json();
-        console.log(`[LockIn] futures ${sport} returned ${data.length} events`);
+        console.log(`[LockIn] futures events returned:`, data.length);
         const teamsMap = {};
         data.forEach(event => {
-          // outrights market
           const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
           outrights?.outcomes?.forEach(o => {
             if (!teamsMap[o.name]) {
@@ -2166,34 +2179,24 @@ export default function App() {
               teamsMap[o.name] = { team: o.name, odds: price };
             }
           });
-          // Also try h2h market in case it's structured differently
-          const h2h = event.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
-          h2h?.outcomes?.forEach(o => {
-            if (!teamsMap[o.name]) {
-              const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
-              teamsMap[o.name] = { team: o.name, odds: price };
-            }
-          });
         });
         teams = Object.values(teamsMap).sort((a, b) => {
-          const aVal = parseInt(a.odds.replace('+',''));
-          const bVal = parseInt(b.odds.replace('+',''));
-          return aVal - bVal;
+          const aNum = parseInt(a.odds.replace('+',''));
+          const bNum = parseInt(b.odds.replace('+',''));
+          return aNum - bNum;
         });
-        if (teams.length > 0) break; // got data, stop trying
+        if (teams.length > 0) break;
       }
 
       console.log(`[LockIn] futures teams found: ${teams.length}`);
-
       if (teams.length > 0) {
         setFuturesTeams(teams);
-        // Delete old cache row and insert fresh (no date conflict)
         await supabase.from("group_results").delete().eq("key", "__futures_cache__");
         await supabase.from("group_results").insert(
           { key: "__futures_cache__", result: JSON.stringify(teams), date: TODAY_DATE }
         );
       } else {
-        console.warn("[LockIn] No futures teams returned from API");
+        console.warn("[LockIn] No futures teams returned — API may not have outrights for this sport/plan");
       }
     } catch(e) { console.error("Futures fetch error:", e); }
     setFuturesOddsLoading(false);
