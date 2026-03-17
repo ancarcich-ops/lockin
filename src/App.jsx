@@ -61,6 +61,522 @@ const ADMIN_PASSWORD = "football4";
 
 
 // ─── WIN CELEBRATION ──────────────────────────────────────────────────────────
+// ─── LOSS CELEBRATION (SYSTEM FAILURE) ───────────────────────────────────────
+function LossCelebration({ losses, onDismiss }) {
+  const canvasRef = useRef(null);
+  const stageRef = useRef(null);
+  const timersRef = useRef([]);
+  function T(fn, ms) { timersRef.current.push(setTimeout(fn, ms)); }
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    if (!canvas || !stage) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+
+    const TX = W * 0.72, TY = H * 0.26;
+    const MX0 = W * 0.10, MY0 = H * 0.82;
+
+    let animPhase = "hunt";
+    let rX = TX + W * 0.15, rY = TY + H * 0.11, rSize = 58;
+    let lockedAt = 0, fireAt = 0, trail = [], missedFired = false;
+    let shakeAmt = 0, flashAlpha = 0, flashColor = [255, 255, 255];
+
+    function doFlash(r, g, b, a) { flashAlpha = a; flashColor = [r, g, b]; }
+    function doShake(a) { shakeAmt = Math.max(shakeAmt, a); }
+    function shake(big) {
+      stage.style.animation = `${big ? "lossShakeBig" : "lossShake"} ${big ? 0.65 : 0.32}s ease-out forwards`;
+      T(() => stage.style.animation = "none", big ? 650 : 320);
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function ease(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; }
+
+    function spawnConfettiRain() {
+      const COLORS = ["#facc15","#fb923c","#f87171","#ffffff","#fde68a","#4ade80","#60a5fa","#fcd34d","#a78bfa"];
+      for (let i = 0; i < 220; i++) {
+        particles.push({
+          x: Math.random() * W,         // spread across full width
+          y: -20 - Math.random() * 200, // start above screen at staggered heights
+          vx: (Math.random()-0.5) * 2,  // gentle sideways drift
+          vy: 2 + Math.random() * 5,    // falling downward
+          size:3+Math.random()*6, color:COLORS[Math.floor(Math.random()*COLORS.length)],
+          alpha:1, decay:0.004+Math.random()*0.006, gravity:0.04+Math.random()*0.06,
+          rotSpeed:(Math.random()-0.5)*0.2, rotation:Math.random()*Math.PI*2,
+          isRect:Math.random()>0.3, w:4+Math.random()*10, h:8+Math.random()*16, trail:[],
+        });
+      }
+    }
+
+    function spawnNuke() {
+      nukeActive = true;
+      nukeStart = performance.now();
+      whiteoutPhase = 'rising';
+      whiteoutAlpha = 0;
+
+      // Shockwaves that expand from bottom center outward
+      nukeShockwaves = [
+        {r:0, maxR:W*1.8, spd:26, alpha:1.0, lw:8,  color:[255,240,180]},
+        {r:0, maxR:W*1.4, spd:18, alpha:0.8, lw:14, color:[255,180,60]},
+        {r:0, maxR:W*1.0, spd:12, alpha:0.6, lw:10, color:[255,100,10]},
+      ];
+
+      // Debris rains upward from ground
+      for (let i = 0; i < 100; i++) {
+        const ang = -Math.PI*0.1 - Math.random()*Math.PI*0.8; // mostly upward
+        const spd = 5+Math.random()*15;
+        nukeDebris.push({
+          x: nukeGroundX + (Math.random()-0.5)*W*0.3,
+          y: H - 10,
+          vx: Math.cos(ang)*spd,
+          vy: Math.sin(ang)*spd,
+          size: 2+Math.random()*6,
+          alpha: 1,
+          color: Math.random()>0.5?'#fb923c':Math.random()>0.5?'#facc15':'#fff',
+          rot: Math.random()*Math.PI*2,
+          rotSpd: (Math.random()-0.5)*0.4,
+          life: 0.6+Math.random()*0.5,
+        });
+      }
+    }
+
+    function drawNuke(nt) {
+      if (nt <= 0) return;
+      const gx = nukeGroundX;
+      const gy = nukeGroundY; // below screen
+      const maxStemH = H * 1.6; // stem goes way off top
+
+      // How far the stem has risen (0 = at ground, 1 = full height)
+      const riseT = easeOut(Math.min(nt * 1.4, 1));
+      const sH = lerp(0, maxStemH, riseT);
+      const sW = lerp(0, 30, easeOut(Math.min(nt*0.7, 1)));
+      const sBaseW = lerp(0, 80, easeOut(Math.min(nt*0.85, 1)));
+      const stemTop = gy - sH; // this goes negative (above screen) = good
+
+      // Stem glow — massive ambient light from below
+      const ambientRadius = lerp(0, W*1.2, easeOut(Math.min(nt*1.2,1)));
+      const ambGrad = ctx.createRadialGradient(gx, H, 0, gx, H, ambientRadius);
+      ambGrad.addColorStop(0, `rgba(255,200,80,${Math.min(nt*2,0.6)})`);
+      ambGrad.addColorStop(0.3, `rgba(255,120,20,${Math.min(nt*2,0.4)})`);
+      ambGrad.addColorStop(0.6, `rgba(200,50,0,${Math.min(nt*1.5,0.2)})`);
+      ambGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ambGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stem body — draw even if top is above canvas
+      const drawStemTop = Math.max(stemTop, -50);
+      const drawStemH = gy - drawStemTop;
+      if (drawStemH > 0 && sW > 0) {
+        const stemGrad = ctx.createLinearGradient(gx, gy, gx, drawStemTop);
+        stemGrad.addColorStop(0, `rgba(255,200,60,${riseT*0.95})`);
+        stemGrad.addColorStop(0.25, `rgba(255,140,25,${riseT*0.88})`);
+        stemGrad.addColorStop(0.6, `rgba(200,80,10,${riseT*0.78})`);
+        stemGrad.addColorStop(1, `rgba(140,45,5,${riseT*0.65})`);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(gx - sBaseW/2, gy);
+        ctx.bezierCurveTo(gx - sBaseW/2, gy - drawStemH*0.2, gx - sW/2, drawStemTop + drawStemH*0.15, gx - sW/2, drawStemTop);
+        ctx.lineTo(gx + sW/2, drawStemTop);
+        ctx.bezierCurveTo(gx + sW/2, drawStemTop + drawStemH*0.15, gx + sBaseW/2, gy - drawStemH*0.2, gx + sBaseW/2, gy);
+        ctx.closePath();
+        ctx.fillStyle = stemGrad;
+        ctx.fill();
+        // Inner hot glow streak
+        const ig = ctx.createLinearGradient(gx-sW*0.3, 0, gx+sW*0.3, 0);
+        ig.addColorStop(0, 'rgba(255,230,100,0)');
+        ig.addColorStop(0.5, `rgba(255,245,160,${riseT*0.6})`);
+        ig.addColorStop(1, 'rgba(255,230,100,0)');
+        ctx.fillStyle = ig;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Cap — appears when stem is tall enough, rises with it
+      const capAppear = Math.max(0, (nt - 0.18) / 0.82);
+      if (capAppear > 0) {
+        const capT = easeOut(Math.min(capAppear, 1));
+        // Cap center tracks stem top but clamped — we want it visible on screen
+        const capCY = Math.max(stemTop + 60, H * 0.05);
+        const capCX = gx;
+        const cR = lerp(0, 130, capT); // huge cap
+        const cRv = lerp(0, 80, capT);
+
+        // Outer atmospheric glow around cap
+        ctx.save();
+        ctx.scale(1, cRv/cR);
+        const atmG = ctx.createRadialGradient(capCX, capCY*(cR/cRv), 0, capCX, capCY*(cR/cRv), cR*1.6);
+        atmG.addColorStop(0, `rgba(255,160,30,${capT*0.55})`);
+        atmG.addColorStop(0.45, `rgba(200,70,8,${capT*0.32})`);
+        atmG.addColorStop(0.8, `rgba(120,25,0,${capT*0.15})`);
+        atmG.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = atmG;
+        ctx.beginPath();ctx.arc(capCX, capCY*(cR/cRv), cR*1.6, 0, Math.PI*2);ctx.fill();
+        ctx.restore();
+
+        // Puffball cap
+        const puffs = [
+          {ox:0, oy:0, r:cR},
+          {ox:-cR*0.56, oy:cR*0.25, r:cR*0.72},
+          {ox:cR*0.56, oy:cR*0.25, r:cR*0.72},
+          {ox:-cR*0.82, oy:cR*0.56, r:cR*0.54},
+          {ox:cR*0.82, oy:cR*0.56, r:cR*0.54},
+          {ox:0, oy:cR*0.46, r:cR*0.64},
+          {ox:-cR*0.35, oy:-cR*0.3, r:cR*0.60},
+          {ox:cR*0.35, oy:-cR*0.3, r:cR*0.60},
+          {ox:-cR*0.65, oy:-cR*0.1, r:cR*0.48},
+          {ox:cR*0.65, oy:-cR*0.1, r:cR*0.48},
+        ];
+        ctx.save();
+        ctx.scale(1, cRv/cR);
+        const yS = capCY*(cR/cRv);
+        puffs.forEach(p => {
+          const pg = ctx.createRadialGradient(capCX+p.ox, yS+p.oy, 0, capCX+p.ox, yS+p.oy, p.r);
+          pg.addColorStop(0, `rgba(255,185,65,${capT*0.96})`);
+          pg.addColorStop(0.3, `rgba(220,105,22,${capT*0.88})`);
+          pg.addColorStop(0.62, `rgba(160,58,8,${capT*0.76})`);
+          pg.addColorStop(0.85, `rgba(90,22,2,${capT*0.5})`);
+          pg.addColorStop(1, 'rgba(40,8,0,0)');
+          ctx.fillStyle = pg;
+          ctx.beginPath();ctx.arc(capCX+p.ox, yS+p.oy, p.r, 0, Math.PI*2);ctx.fill();
+        });
+        // Blazing hot white core
+        const hc = ctx.createRadialGradient(capCX, yS-cR*0.08, 0, capCX, yS-cR*0.08, cR*0.5);
+        hc.addColorStop(0, `rgba(255,255,230,${capT*0.96})`);
+        hc.addColorStop(0.35, `rgba(255,225,100,${capT*0.78})`);
+        hc.addColorStop(0.7, `rgba(255,145,20,${capT*0.4})`);
+        hc.addColorStop(1, 'rgba(255,100,0,0)');
+        ctx.fillStyle = hc;
+        ctx.beginPath();ctx.arc(capCX, yS-cR*0.08, cR*0.5, 0, Math.PI*2);ctx.fill();
+        ctx.restore();
+
+        // Skirt ring
+        if (capAppear > 0.35) {
+          const skirtT = easeOut(Math.min((capAppear-0.35)/0.4, 1));
+          ctx.save();
+          ctx.globalAlpha = capT*0.7*skirtT;
+          const skR = cR*1.12*skirtT;
+          const skG = ctx.createRadialGradient(capCX, capCY+cRv*0.84, 0, capCX, capCY+cRv*0.84, skR);
+          skG.addColorStop(0, 'rgba(255,150,30,0.7)');
+          skG.addColorStop(0.55, 'rgba(200,70,8,0.35)');
+          skG.addColorStop(1, 'rgba(100,20,0,0)');
+          ctx.fillStyle = skG;
+          ctx.scale(1, 22/Math.max(skR,1));
+          ctx.beginPath();ctx.arc(capCX, (capCY+cRv*0.84)*(Math.max(skR,1)/22), skR, 0, Math.PI*2);ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    function drawWhiteout() {
+      if (whiteoutPhase === 'none' || whiteoutAlpha <= 0) return;
+      // Full screen blinding white with warm tint at edges
+      ctx.save();
+      // White core
+      ctx.fillStyle = `rgba(255,255,240,${whiteoutAlpha})`;
+      ctx.fillRect(0, 0, W, H);
+      // Warm orange vignette at edges during peak
+      if (whiteoutAlpha > 0.5) {
+        const vg = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.9);
+        vg.addColorStop(0, 'rgba(255,255,255,0)');
+        vg.addColorStop(0.7, `rgba(255,180,30,${(whiteoutAlpha-0.5)*0.6})`);
+        vg.addColorStop(1, `rgba(255,120,0,${(whiteoutAlpha-0.5)*0.9})`);
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, W, H);
+      }
+      ctx.restore();
+    }
+
+    function drawMissile(cx, cy, angleDeg) {
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(angleDeg * Math.PI / 180);
+      const s = 1.1;
+      ctx.fillStyle = "#c8d0d8"; ctx.beginPath(); ctx.moveTo(0,-20*s); ctx.lineTo(7*s,-7*s); ctx.lineTo(7*s,12*s); ctx.lineTo(-7*s,12*s); ctx.lineTo(-7*s,-7*s); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#e8edf2"; ctx.beginPath(); ctx.moveTo(0,-20*s); ctx.lineTo(7*s,-7*s); ctx.lineTo(-7*s,-7*s); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#a0a8b4";
+      ctx.beginPath(); ctx.moveTo(7*s,5*s); ctx.lineTo(16*s,16*s); ctx.lineTo(7*s,12*s); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-7*s,5*s); ctx.lineTo(-16*s,16*s); ctx.lineTo(-7*s,12*s); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fb923c"; ctx.beginPath(); ctx.ellipse(0,14*s,5*s,5*s,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#facc15"; ctx.beginPath(); ctx.ellipse(0,17*s,3*s,7*s,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#60a5fa"; ctx.beginPath(); ctx.arc(0,-9*s,3*s,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawReticle(x, y, sz, locked, lp) {
+      const col = locked ? "#f87171" : lp > 0.5 ? "#facc15" : "#4ade80";
+      ctx.save(); ctx.globalAlpha = 0.92;
+      ctx.beginPath(); ctx.arc(x,y,sz,0,Math.PI*2); ctx.setLineDash([8,5]); ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+      const br = sz*0.64, blen = sz*0.37, bOff = sz*0.27*(1-lp);
+      [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy]) => {
+        const bx = x+sx*(br+bOff), by = y+sy*(br+bOff);
+        ctx.beginPath(); ctx.moveTo(bx+sx*blen,by); ctx.lineTo(bx,by); ctx.lineTo(bx,by+sy*blen); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke();
+      });
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fillStyle = col; ctx.fill();
+      if (lp > 0) { ctx.beginPath(); ctx.arc(x,y,sz+8,-Math.PI/2,-Math.PI/2+lp*Math.PI*2); ctx.strokeStyle="#f87171"; ctx.lineWidth=4; ctx.stroke(); }
+      // Iran flag in reticle
+      ctx.save(); ctx.beginPath(); ctx.arc(x,y,sz*0.5,0,Math.PI*2); ctx.clip();
+      ctx.fillStyle="#239f40"; ctx.fillRect(x-sz*0.5,y-sz*0.5,sz,sz*0.34);
+      ctx.fillStyle="#fff"; ctx.fillRect(x-sz*0.5,y-sz*0.16,sz,sz*0.32);
+      ctx.fillStyle="#da0000"; ctx.fillRect(x-sz*0.5,y+sz*0.16,sz,sz*0.34);
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(x,y,sz*0.5,0,Math.PI*2); ctx.strokeStyle="rgba(255,255,255,0.18)"; ctx.lineWidth=1; ctx.stroke();
+      if (locked) { ctx.font="bold 11px 'Courier New'"; ctx.fillStyle="#f87171"; ctx.textAlign="center"; ctx.globalAlpha=0.5+0.5*Math.sin(Date.now()*0.025); ctx.fillText("LOCKED",x,y+sz+20); }
+      ctx.restore();
+    }
+
+    const t0 = performance.now();
+    let rafId;
+
+    // HUD timers
+    T(() => { stage.querySelector(".lc-scanbg").style.opacity = "1"; stage.querySelector(".lc-scanbar").style.animation = "lcScan 1.8s linear infinite"; stage.querySelector(".lc-hud").style.opacity = "1"; }, 120);
+    T(() => { stage.querySelector(".lc-flag").style.opacity = "1"; stage.querySelector(".lc-htr").textContent = "TARGET: DETECTED"; stage.querySelector(".lc-htr").style.color = "#facc15"; }, 380);
+    T(() => { stage.querySelector(".lc-hbl").textContent = "WARHEAD: HOT"; stage.querySelector(".lc-hbl").style.color = "#facc15"; }, 980);
+
+    function tick(now) {
+      const el = now - t0;
+      ctx.clearRect(0, 0, W, H);
+      const sx = shakeAmt > 0.3 ? (Math.random()-0.5)*shakeAmt : 0;
+      const sy = shakeAmt > 0.3 ? (Math.random()-0.5)*shakeAmt : 0;
+      shakeAmt *= 0.78;
+      ctx.save(); ctx.translate(sx, sy);
+      if (flashAlpha > 0.01) { const [r,g,b] = flashColor; ctx.fillStyle = `rgba(${r},${g},${b},${flashAlpha})`; ctx.fillRect(-50,-50,W+100,H+100); flashAlpha *= 0.7; }
+
+      if (animPhase === "hunt") {
+        const ht = Math.min(el/1000, 1), w = 1-ht;
+        rX = lerp(rX, TX+Math.sin(el*0.003)*38*w, 0.034+ht*0.038);
+        rY = lerp(rY, TY+Math.cos(el*0.0025)*26*w, 0.034+ht*0.038);
+        rSize = lerp(rSize, 34, 0.022);
+        drawReticle(rX, rY, rSize, false, 0);
+        if (ht >= 1) { animPhase = "locking"; lockedAt = now; }
+
+      } else if (animPhase === "locking") {
+        const lt = Math.min((now-lockedAt)/680, 1);
+        rX = lerp(rX, TX, 0.09+lt*0.11); rY = lerp(rY, TY, 0.09+lt*0.11); rSize = lerp(rSize, 30, 0.05);
+        drawReticle(rX, rY, rSize, lt > 0.95, lt);
+        if (lt > 0.44 && lt < 0.49) { doFlash(248,113,113,0.35); doShake(8); }
+        if (lt > 0.77 && lt < 0.82) { doFlash(248,113,113,0.55); doShake(10); }
+        if (lt >= 1) {
+          animPhase = "locked"; fireAt = now + 460;
+          doFlash(255,80,80,0.75); doShake(16);
+          stage.querySelector(".lc-htr").textContent = "TARGET: LOCKED"; stage.querySelector(".lc-htr").style.color = "#f87171";
+          stage.querySelector(".lc-hbr").textContent = "STATUS: LOCKED"; stage.querySelector(".lc-hbr").style.color = "#f87171";
+          T(() => { stage.querySelector(".lc-hbr").textContent = "STATUS: FIRING"; doFlash(255,200,30,0.4); doShake(10); }, 420);
+        }
+
+      } else if (animPhase === "locked") {
+        drawReticle(TX, TY, 30, true, 1);
+        if (now >= fireAt) animPhase = "fire";
+
+      } else if (animPhase === "fire") {
+        drawReticle(TX, TY, 30, true, 1);
+        const ft = Math.min((now-fireAt)/680, 1), et = ease(ft);
+        const cpX = TX-W*0.17, cpY = Math.min(MY0,TY)-H*0.33;
+        let mx, my;
+        if (ft < 0.73) {
+          mx = (1-et)*(1-et)*MX0+2*(1-et)*et*cpX+et*et*TX;
+          my = (1-et)*(1-et)*MY0+2*(1-et)*et*cpY+et*et*TY;
+        } else {
+          const vt=(ft-0.73)/0.27, ve=vt*vt;
+          const e73=ease(0.73);
+          const midX=(1-e73)*(1-e73)*MX0+2*(1-e73)*e73*cpX+e73*e73*TX;
+          const midY=(1-e73)*(1-e73)*MY0+2*(1-e73)*e73*cpY+e73*e73*TY;
+          mx=lerp(midX,W+80,ve); my=lerp(midY,TY+H*0.38,vt*0.65);
+        }
+        const ft2=Math.min(ft+0.015,1),et2=ease(ft2);
+        let nx=mx+18,ny=my+12;
+        if (ft2<0.73) { nx=(1-et2)*(1-et2)*MX0+2*(1-et2)*et2*cpX+et2*et2*TX; ny=(1-et2)*(1-et2)*MY0+2*(1-et2)*et2*cpY+et2*et2*TY; }
+        const angle=Math.atan2(ny-my,nx-mx)*(180/Math.PI)+90;
+        trail.push({x:mx,y:my}); if(trail.length>55) trail.shift();
+        for(let i=1;i<trail.length;i++){
+          const p=trail[i-1],q=trail[i],pr=i/trail.length;
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle=`rgba(250,175,25,${pr*0.88})`;ctx.lineWidth=1.5+pr*4.5;ctx.stroke();
+        }
+        drawMissile(mx, my, angle);
+
+        if (ft >= 0.73 && !missedFired) {
+          missedFired = true;
+          // Flag wiggle + smoke
+          const sm = stage.querySelector(".lc-smoke");
+          sm.style.left=(TX+52)+"px"; sm.style.top=(TY-8)+"px"; sm.style.opacity="1";
+          T(()=>{ sm.style.opacity="0"; }, 900);
+          const fi = stage.querySelector(".lc-flaginner");
+          fi.style.animation="none";
+          T(()=>{ fi.style.animation="lcWiggle 0.7s ease-out forwards"; }, 40);
+          T(()=>{ stage.querySelector(".lc-flagmoji").textContent="😂"; stage.querySelector(".lc-flagmoji").style.opacity="1"; }, 90);
+          stage.querySelector(".lc-hbr").textContent="STATUS: MISS"; stage.querySelector(".lc-hbr").style.color="#fca5a5";
+          stage.querySelector(".lc-hbl").textContent="TARGET: SURVIVED"; stage.querySelector(".lc-hbl").style.color="#f87171";
+          doFlash(255,80,80,0.5); doShake(14);
+        }
+
+        if (ft >= 1) {
+          animPhase = "chaos";
+          stage.querySelector(".lc-hud").style.opacity="0";
+          stage.querySelector(".lc-scanbg").style.opacity="0";
+
+          // 1. Red flash + shake
+          T(()=>{ doFlash(248,113,113,1); doShake(26); shake(true); stage.style.background="#050008"; },280);
+
+          // 2. Flash + glitch bars appear
+          T(()=>{
+            stage.querySelector(".lc-flash").style.opacity="1";
+            T(()=>stage.querySelector(".lc-flash").style.opacity="0", 90);
+            stage.querySelector(".lc-noise").style.opacity="1";
+            // Glitch bars
+            const bars = stage.querySelector(".lc-bars");
+            bars.innerHTML="";
+            for(let i=0;i<10;i++){
+              const d=document.createElement("div");
+              const top=Math.random()*H, h=3+Math.random()*18;
+              d.style.cssText=`position:absolute;top:${top}px;left:0;right:0;height:${h}px;background:${Math.random()>0.5?"rgba(248,113,113,0.35)":"rgba(96,165,250,0.2)"};transform:translateX(${(Math.random()-0.5)*20}px)`;
+              bars.appendChild(d);
+            }
+            T(()=>bars.innerHTML="", 500);
+            doFlash(248,113,113,0.4);
+          },400);
+
+          // 3. ERROR text crashes in
+          T(()=>{
+            const err = stage.querySelector(".lc-error");
+            err.style.animation="lcGlitchSlam 0.5s ease-out forwards";
+            err.style.opacity="1";
+            // Rain
+            const rain=stage.querySelector(".lc-rain");
+            rain.innerHTML="";
+            const items=["ERROR","L","LOSS","😭","0xDEAD","L","null","L","💀"];
+            for(let i=0;i<45;i++){
+              const d=document.createElement("div");
+              d.style.cssText=`position:absolute;left:${Math.random()*100}%;top:-20px;font-size:${11+Math.random()*18}px;font-weight:900;color:#f87171;opacity:${0.5+Math.random()*0.5};animation:lcDrop ${1.3+Math.random()*1.8}s ease-in ${Math.random()*0.5}s forwards;font-family:'Courier New',monospace`;
+              d.textContent=items[Math.floor(Math.random()*items.length)];
+              rain.appendChild(d);
+            }
+            doFlash(248,113,113,0.45);
+          },580);
+
+          // 4. Subtext
+          T(()=>{
+            const sub=stage.querySelector(".lc-sub");
+            sub.textContent="FATAL ERROR. ACCOUNT DELETED.";
+            sub.style.opacity="1"; sub.style.animation="lcSubIn 0.45s cubic-bezier(0.15,1.6,0.4,1) forwards";
+          },1100);
+
+          // 5. Melt out
+          T(()=>{
+            stage.querySelector(".lc-error").style.animation="lcMelt 0.5s ease-in forwards";
+            stage.querySelector(".lc-sub").style.transition="opacity 0.3s"; stage.querySelector(".lc-sub").style.opacity="0";
+            stage.querySelector(".lc-rain").innerHTML=""; stage.querySelector(".lc-noise").style.opacity="0";
+            stage.querySelector(".lc-flag").style.opacity="0"; stage.querySelector(".lc-flagmoji").style.opacity="0";
+          },2400);
+
+          // 6. Settle
+          T(()=>{
+            stage.querySelector(".lc-settle").style.display="block";
+            stage.querySelector(".lc-settle").style.animation="lcSettleIn 0.5s cubic-bezier(0.34,1.4,0.64,1) forwards";
+            stage.style.background="#050008";
+          },2750);
+        }
+      }
+
+      ctx.restore();
+      if (["hunt","locking","locked","fire"].includes(animPhase) || flashAlpha > 0.01 || shakeAmt > 0.2) {
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
+    rafId = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(rafId); timersRef.current.forEach(clearTimeout); };
+  }, []);
+
+  const lossCards = losses.map((l, i) => (
+    <div key={l.key} style={{ background:"rgba(248,113,113,0.08)", borderLeft:"4px solid #f87171", borderRadius:10, padding:"13px 16px", display:"flex", alignItems:"center", gap:12, marginBottom:10, animation:`lcCardIn 0.35s cubic-bezier(0.2,1.5,0.4,1) ${0.05+i*0.14}s both` }}>
+      <div style={{ fontSize:20 }}>😭</div>
+      <div>
+        <div style={{ fontSize:14, fontWeight:700, color:"#f87171" }}>{l.label}</div>
+        <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:2, marginTop:2 }}>GRADED LOSS</div>
+      </div>
+    </div>
+  ));
+
+  return (
+    <div ref={stageRef} onClick={onDismiss} style={{ position:"fixed", inset:0, zIndex:1000, background:"#000", cursor:"pointer", overflow:"hidden" }}>
+      <style>{`
+        @keyframes lcScan{0%{top:-40px}100%{top:110%}}
+        @keyframes lcBlink{0%,100%{opacity:1}50%{opacity:0.3}}
+        @keyframes lcWiggle{0%,100%{transform:rotate(0)scale(1)}20%{transform:rotate(-18deg)scale(1.25)}45%{transform:rotate(14deg)scale(1.18)}65%{transform:rotate(-10deg)scale(1.1)}82%{transform:rotate(6deg)scale(1.05)}}
+        @keyframes lossShake{0%{transform:translate(0,0)}10%{transform:translate(-10px,7px)}25%{transform:translate(8px,-8px)}40%{transform:translate(-6px,5px)}60%{transform:translate(4px,-3px)}100%{transform:translate(0,0)}}
+        @keyframes lossShakeBig{0%{transform:translate(0,0)}8%{transform:translate(-18px,12px)}20%{transform:translate(15px,-15px)}35%{transform:translate(-12px,10px)}55%{transform:translate(8px,-6px)}75%{transform:translate(-4px,3px)}100%{transform:translate(0,0)}}
+        @keyframes lcGlitchSlam{0%{clip-path:inset(0 100% 0 0);opacity:0}20%{clip-path:inset(0 45% 0 0);opacity:1}40%{clip-path:inset(0 65% 0 0)}60%{clip-path:inset(0 20% 0 0)}80%{clip-path:inset(0 5% 0 0)}100%{clip-path:inset(0 0% 0 0);opacity:1}}
+        @keyframes lcRgbSplit{0%{text-shadow:4px 0 #f87171,-4px 0 #60a5fa,0 0 20px rgba(248,113,113,0.5)}25%{text-shadow:-6px 0 #f87171,6px 0 #60a5fa,0 4px #facc15}50%{text-shadow:5px 2px #f87171,-5px -2px #60a5fa}75%{text-shadow:-4px 0 #facc15,4px 0 #f87171}100%{text-shadow:4px 0 #f87171,-4px 0 #60a5fa}}
+        @keyframes lcMelt{0%{transform:translateX(-50%) scaleY(1);opacity:1}100%{transform:translateX(-50%) scaleY(2.8);opacity:0;filter:blur(10px)}}
+        @keyframes lcDrop{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(110vh) rotate(540deg);opacity:0}}
+        @keyframes lcSubIn{0%{transform:translateX(-50%) translateY(24px);opacity:0}55%{transform:translateX(-50%) translateY(-4px);opacity:1}100%{transform:translateX(-50%) translateY(0);opacity:1}}
+        @keyframes lcSettleIn{0%{opacity:0;transform:translate(-50%,-50%) scale(0.85)}65%{transform:translate(-50%,-50%) scale(1.04)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+        @keyframes lcCardIn{0%{transform:translateX(60px);opacity:0}55%{transform:translateX(-4px)}100%{transform:translateX(0);opacity:1}}
+      `}</style>
+
+      <canvas ref={canvasRef} style={{ position:"absolute", inset:0, zIndex:3, pointerEvents:"none" }} />
+
+      {/* Scan lines */}
+      <div className="lc-scanbg" style={{ position:"absolute", inset:0, background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px)", zIndex:2, opacity:0, pointerEvents:"none" }} />
+      <div className="lc-scanbar" style={{ position:"absolute", width:"100%", height:36, background:"linear-gradient(transparent,rgba(255,255,255,0.03),transparent)", zIndex:2, top:-40, pointerEvents:"none" }} />
+
+      {/* HUD */}
+      <div className="lc-hud" style={{ position:"absolute", inset:0, opacity:0, zIndex:4, pointerEvents:"none", fontFamily:"'Courier New',monospace", fontSize:10, color:"#4ade80", letterSpacing:1 }}>
+        <div style={{ position:"absolute", top:12, left:12, width:24, height:24, borderTop:"1.5px solid #4ade80", borderLeft:"1.5px solid #4ade80" }} />
+        <div style={{ position:"absolute", top:12, right:12, width:24, height:24, borderTop:"1.5px solid #4ade80", borderRight:"1.5px solid #4ade80" }} />
+        <div style={{ position:"absolute", bottom:12, left:12, width:24, height:24, borderBottom:"1.5px solid #4ade80", borderLeft:"1.5px solid #4ade80" }} />
+        <div style={{ position:"absolute", bottom:12, right:12, width:24, height:24, borderBottom:"1.5px solid #4ade80", borderRight:"1.5px solid #4ade80" }} />
+        <div className="lc-htr" style={{ position:"absolute", top:14, left:44 }}>SCANNING...</div>
+        <div className="lc-hbl" style={{ position:"absolute", bottom:14, left:44 }}>WARHEAD: ARMED</div>
+        <div className="lc-hbr" style={{ position:"absolute", bottom:14, right:44, textAlign:"right" }}>STATUS: --</div>
+      </div>
+
+      {/* Flag */}
+      <div className="lc-flag" style={{ position:"absolute", top:"20%", right:"18%", opacity:0, zIndex:5, pointerEvents:"none" }}>
+        <div className="lc-flaginner" style={{ animation:"lcBlink 0.7s ease-in-out infinite" }}>
+          <svg width="52" height="52" viewBox="0 0 52 52">
+            <clipPath id="lcfc"><circle cx="26" cy="26" r="24"/></clipPath>
+            <rect x="2" y="2" width="48" height="16" fill="#239f40" clipPath="url(#lcfc)"/>
+            <rect x="2" y="18" width="48" height="16" fill="#fff" clipPath="url(#lcfc)"/>
+            <rect x="2" y="34" width="48" height="16" fill="#da0000" clipPath="url(#lcfc)"/>
+            <circle cx="26" cy="26" r="24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"/>
+          </svg>
+        </div>
+        <div style={{ fontSize:7, color:"#f87171", letterSpacing:"2.5px", textAlign:"center", marginTop:3, fontWeight:800 }}>TARGET</div>
+      </div>
+      <div className="lc-flagmoji" style={{ position:"absolute", top:"20%", right:"18%", opacity:0, zIndex:7, fontSize:22, transform:"translate(12px,-26px)", pointerEvents:"none" }} />
+
+      {/* Flash + noise */}
+      <div className="lc-flash" style={{ position:"absolute", inset:0, background:"rgba(248,113,113,0.8)", opacity:0, zIndex:20, pointerEvents:"none", transition:"opacity 0.07s" }} />
+      <div className="lc-noise" style={{ position:"absolute", inset:0, zIndex:7, pointerEvents:"none", opacity:0, background:"repeating-linear-gradient(45deg,rgba(248,113,113,0.07) 0px,transparent 2px,rgba(96,165,250,0.05) 4px,transparent 6px)" }} />
+      <div className="lc-bars" style={{ position:"absolute", inset:0, zIndex:10, pointerEvents:"none", overflow:"hidden" }} />
+      <div className="lc-smoke" style={{ position:"absolute", opacity:0, zIndex:6, fontSize:38, transform:"translate(-50%,-50%)", pointerEvents:"none" }}>💨</div>
+
+      {/* Rain */}
+      <div className="lc-rain" style={{ position:"absolute", inset:0, zIndex:8, pointerEvents:"none" }} />
+
+      {/* ERROR text */}
+      <div className="lc-error" style={{ position:"absolute", top:"28%", left:"50%", transform:"translateX(-50%)", opacity:0, zIndex:9, pointerEvents:"none", textAlign:"center", fontFamily:"'Courier New',monospace" }}>
+        <div style={{ fontSize:10, color:"#f87171", letterSpacing:3, marginBottom:6 }}>SYSTEM ERROR 0x4C4F5353</div>
+        <div style={{ fontSize:"clamp(60px,12vw,90px)", fontWeight:900, color:"#f87171", lineHeight:1, animation:"lcRgbSplit 0.12s linear infinite" }}>LOSS</div>
+        <div style={{ fontSize:9, color:"rgba(248,113,113,0.5)", letterSpacing:2, marginTop:4 }}>FATAL · UNRECOVERABLE</div>
+      </div>
+
+      {/* Subtext */}
+      <div className="lc-sub" style={{ position:"absolute", bottom:"22%", left:"50%", transform:"translateX(-50%) translateY(24px)", opacity:0, fontFamily:"'Courier New',monospace", fontSize:11, fontWeight:900, color:"#fca5a5", letterSpacing:3, textTransform:"uppercase", whiteSpace:"nowrap", zIndex:12, pointerEvents:"none" }} />
+
+      {/* Settle */}
+      <div className="lc-settle" style={{ display:"none", position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", zIndex:15, textAlign:"center", width:320 }}>
+        <div style={{ fontSize:48, marginBottom:10 }}>⚠️😭</div>
+        <div style={{ fontSize:28, fontWeight:900, color:"#f87171", letterSpacing:-0.5, marginBottom:4, fontFamily:"'Courier New',monospace", textShadow:"0 0 30px rgba(248,113,113,0.5)" }}>SYSTEM FAILURE</div>
+        <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginBottom:22, letterSpacing:2 }}>GROUP PLAYS GRADED</div>
+        {lossCards}
+        <div style={{ marginTop:20, fontSize:10, color:"rgba(255,255,255,0.2)", letterSpacing:1, textTransform:"uppercase" }}>Tap to continue</div>
+      </div>
+    </div>
+  );
+}
+
 function WinCelebration({ wins, phase, onDismiss }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
@@ -89,6 +605,12 @@ function WinCelebration({ wins, phase, onDismiss }) {
     let shakeAmt = 0, flashAlpha = 0, flashColor = [255,255,255];
     let lockedFired = false, impactFired = false;
     let overlayAlpha = 0, showSettle = false;
+    // Nuke state
+    const nukeGroundX = W * 0.5;
+    const nukeGroundY = H + 20;
+    let nukeStart = 0, nukeActive = false, nukeAlpha = 1, nukeFadingOut = false;
+    let nukeShockwaves = [], nukeDebris = [];
+    let whiteoutAlpha = 0, whiteoutPhase = 'none';
 
     function lerp(a,b,t){ return a+(b-a)*t; }
     function ease(t){ return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
@@ -313,14 +835,17 @@ function WinCelebration({ wins, phase, onDismiss }) {
         drawMissile(mx,my,angle);
         if(ft>=1 && !impactFired){
           impactFired=true; animPhase="exploding";
-          spawnExplosion(tgtX,tgtY);
           triggerFlash(255,255,220,1.0); triggerShake(28);
-          // big fireball glow at impact point
           T(()=>{ triggerFlash(255,180,30,0.7); triggerShake(20); },100);
           T(()=>{ triggerFlash(255,100,0,0.5); triggerShake(14); },220);
-          T(()=>{ triggerFlash(255,220,60,0.3); },380);
-          // transition to settle after explosion settles
-          T(()=>{ overlayAlpha=0; showSettle=true; },1200);
+          // Nuke rises from bottom
+          T(()=>{ spawnNuke(); triggerShake(30); },350);
+          T(()=>{ whiteoutPhase='peak'; },1800);
+          T(()=>{ whiteoutPhase='fading'; },2600);
+          T(()=>{ nukeFadingOut=true; },3200);
+          // Confetti rains from top after nuke fully gone
+          T(()=>{ spawnConfettiRain(); },4400);
+          T(()=>{ overlayAlpha=0; showSettle=true; },5200);
         }
       } else if(animPhase==="exploding"){
         // fireball at impact
@@ -335,6 +860,44 @@ function WinCelebration({ wins, phase, onDismiss }) {
           grad.addColorStop(1,"transparent");
           ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
         }
+      }
+
+      // Nuke cloud + whiteout
+      if(nukeActive){
+        if(nukeFadingOut) nukeAlpha = Math.max(0, nukeAlpha - 0.018);
+        if(nukeAlpha <= 0){ nukeActive = false; }
+        const nt = (now-nukeStart)/2800;
+        ctx.save(); ctx.globalAlpha = nukeAlpha;
+        nukeShockwaves.forEach(sw=>{
+          sw.r += sw.spd;
+          if(sw.r>sw.maxR)return;
+          const a=sw.alpha*(1-sw.r/sw.maxR);
+          if(a<0.005)return;
+          ctx.save();ctx.globalAlpha=nukeAlpha*a;
+          ctx.beginPath();ctx.arc(nukeGroundX,nukeGroundY,sw.r,0,Math.PI*2);
+          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a})`;
+          ctx.lineWidth=sw.lw*(1-sw.r/sw.maxR)+1;ctx.stroke();
+          ctx.lineWidth=(sw.lw*(1-sw.r/sw.maxR)+1)*4;
+          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a*0.2})`;
+          ctx.stroke();
+          ctx.restore();
+        });
+        nukeDebris.forEach(p=>{
+          p.x+=p.vx*0.016*60;p.y+=p.vy*0.016*60;
+          p.vy+=0.08*0.016*60;p.vx*=0.98;
+          p.alpha-=(0.016/p.life)*0.7;p.rot+=p.rotSpd;
+          if(p.alpha<=0)return;
+          ctx.save();ctx.globalAlpha=Math.max(0,p.alpha)*nukeAlpha;
+          ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+          ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
+          ctx.restore();
+        });
+        drawNuke(nt);
+        ctx.restore();
+        if(whiteoutPhase==='rising') whiteoutAlpha = Math.min(whiteoutAlpha+0.02, 0.95);
+        else if(whiteoutPhase==='peak') whiteoutAlpha = 0.92+Math.sin(now*0.004)*0.06;
+        else if(whiteoutPhase==='fading'){ whiteoutAlpha=Math.max(0,whiteoutAlpha-0.01); if(whiteoutAlpha<=0)whiteoutPhase='none'; }
+        drawWhiteout();
       }
 
       // dark overlay fade-in for settle screen
@@ -833,6 +1396,8 @@ export default function App() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [pickNotes, setPickNotes] = useState({}); // { [key]: noteText }
   const [celebrationPhase, setCelebrationPhase] = useState("explode"); // explode | settle
+  const [celebrationLosses, setCelebrationLosses] = useState([]); // plays to mourn
+  const [showLossCelebration, setShowLossCelebration] = useState(false);
 
   // App
   const [page, setPage]                     = useState("group");
@@ -850,6 +1415,14 @@ export default function App() {
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
   const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
+
+  // Futures
+  const [futuresTeams, setFuturesTeams]         = useState([]); // [{team, odds}]
+  const [futuresPicks, setFuturesPicks]         = useState([]); // all users' picks
+  const [myFuturesPicks, setMyFuturesPicks]     = useState([]); // current user's picks
+  const [futuresLoading, setFuturesLoading]     = useState(false);
+  const [futuresOddsLoading, setFuturesOddsLoading] = useState(false);
+  const [futuresSearch, setFuturesSearch]       = useState("");
 
   // Profile
   const [showProfile, setShowProfile]       = useState(false);
@@ -1145,6 +1718,7 @@ export default function App() {
       setPlayResults(built);
       recomputeRecord(built);
       checkForNewWins(built, games);
+      checkForNewLosses(built, games);
     }
 
     // Load all-time record - only rows with graded results
@@ -1289,6 +1863,43 @@ export default function App() {
       setCelebrationWins(newWins);
       setCelebrationPhase("explode");
       setShowCelebration(true);
+    }
+  }
+
+  function checkForNewLosses(results, currentGames) {
+    const seenKey = `lockin_seen_losses_${TODAY_DATE}`;
+    const seen = new Set(JSON.parse(localStorage.getItem(seenKey) || "[]"));
+    const newLosses = Object.entries(results)
+      .filter(([key, result]) => result === "loss" && !seen.has(key) && !key.startsWith("__"))
+      .map(([key]) => {
+        const [gid, bt] = key.split("__");
+        let label = null;
+        const allPicksEntries = Object.values(allPicks);
+        for (const p of allPicksEntries) {
+          const stored = p.selections?.[key];
+          if (stored?.label) { label = `${stored.label} ${stored.line}`; break; }
+        }
+        if (!label) {
+          const game = currentGames.find(g => g.id === gid);
+          if (game) {
+            const BT = {
+              spread_away: (g) => `${g.away} ${g.spread.away}`,
+              spread_home: (g) => `${g.home} ${g.spread.home}`,
+              over: (g) => `Over ${g.total}`,
+              under: (g) => `Under ${g.total}`,
+              ml_away: (g) => `${g.away} ML`,
+              ml_home: (g) => `${g.home} ML`,
+            };
+            label = BT[bt]?.(game) || key;
+          } else { label = key; }
+        }
+        return { key, label };
+      });
+    if (newLosses.length > 0 && !isAdmin) {
+      const updatedSeen = [...seen, ...newLosses.map(w => w.key)];
+      localStorage.setItem(seenKey, JSON.stringify(updatedSeen));
+      setCelebrationLosses(newLosses);
+      setShowLossCelebration(true);
     }
   }
 
@@ -1501,6 +2112,92 @@ export default function App() {
     const next = { ...allPicks };
     delete next[personUsername];
     setAllPicks(next);
+  }
+
+  // ── Futures ─────────────────────────────────────────────────────────────────
+  async function loadFutures() {
+    setFuturesLoading(true);
+    // Load cached futures teams from group_results
+    const { data: cached } = await supabase
+      .from("group_results")
+      .select("result")
+      .eq("key", "__futures_cache__")
+      .maybeSingle();
+    if (cached?.result) {
+      try { setFuturesTeams(JSON.parse(cached.result)); } catch(e) {}
+    }
+    // Load all futures picks
+    const { data: picks } = await supabase
+      .from("futures_picks")
+      .select("username, team, odds, result, user_id")
+      .order("created_at", { ascending: true });
+    if (picks) {
+      setFuturesPicks(picks);
+      setMyFuturesPicks(picks.filter(p => p.username === username));
+    }
+    setFuturesLoading(false);
+  }
+
+  async function fetchFuturesOdds() {
+    const apiKey = import.meta.env.VITE_ODDS_API_KEY;
+    if (!apiKey) return;
+    setFuturesOddsLoading(true);
+    try {
+      const res = await fetch(
+        `https://api.the-odds-api.com/v4/sports/basketball_ncaab/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&dateFormat=iso`
+      );
+      if (!res.ok) { setFuturesOddsLoading(false); return; }
+      const data = await res.json();
+      // outrights returns events where each outcome is a team
+      const teamsMap = {};
+      data.forEach(event => {
+        const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
+        outrights?.outcomes?.forEach(o => {
+          if (!teamsMap[o.name]) {
+            const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
+            teamsMap[o.name] = { team: o.name, odds: price };
+          }
+        });
+      });
+      const teams = Object.values(teamsMap).sort((a, b) => {
+        // Sort by odds — favorites first
+        const aVal = parseInt(a.odds.replace('+',''));
+        const bVal = parseInt(b.odds.replace('+',''));
+        return aVal - bVal;
+      });
+      if (teams.length > 0) {
+        setFuturesTeams(teams);
+        await supabase.from("group_results").upsert(
+          { key: "__futures_cache__", result: JSON.stringify(teams), date: TODAY_DATE },
+          { onConflict: "key,date" }
+        );
+      }
+    } catch(e) { console.error("Futures fetch error:", e); }
+    setFuturesOddsLoading(false);
+  }
+
+  async function submitFuturesPick(team, odds) {
+    if (!session || !username) return;
+    const { data: profile } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
+    if (!profile) return;
+    const { error } = await supabase.from("futures_picks").insert({
+      user_id: profile.id,
+      username,
+      team,
+      odds,
+    });
+    if (!error) {
+      const newPick = { user_id: profile.id, username, team, odds, result: null };
+      setFuturesPicks(prev => [...prev, newPick]);
+      setMyFuturesPicks(prev => [...prev, newPick]);
+    }
+  }
+
+  async function gradeFuture(team, result) {
+    if (!isAdmin) return;
+    await supabase.from("futures_picks").update({ result }).eq("team", team);
+    setFuturesPicks(prev => prev.map(p => p.team === team ? { ...p, result } : p));
+    setMyFuturesPicks(prev => prev.map(p => p.team === team ? { ...p, result } : p));
   }
 
   // ── Player profile opener ───────────────────────────────────────────────────
@@ -1730,6 +2427,7 @@ export default function App() {
 
       {/* ── WIN CELEBRATION ── */}
       {showCelebration && <WinCelebration wins={celebrationWins} phase={celebrationPhase} onDismiss={() => setShowCelebration(false)} />}
+      {showLossCelebration && <LossCelebration losses={celebrationLosses} onDismiss={() => setShowLossCelebration(false)} />}
 
       {/* ── PROFILE PAGE ── */}
       {showProfile && (
@@ -1783,8 +2481,8 @@ export default function App() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "3px", gap: 2, border: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-              {[["picks","Picks"],["group","Group"],["players","Players"]].filter(([p]) => !viewerMode || p !== "picks").map(([p, label]) => (
-                <button key={p} className="nav-btn" onClick={() => setPage(p)} style={{ padding: "7px 10px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 8, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 11, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", whiteSpace: "nowrap" }}>
+              {[["picks","Picks"],["group","Group"],["players","Players"],["futures","Futures"]].filter(([p]) => !viewerMode || p !== "picks").map(([p, label]) => (
+                <button key={p} className="nav-btn" onClick={() => { setPage(p); if(p==="futures") loadFutures(); }} style={{ padding: "7px 10px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 8, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 11, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", whiteSpace: "nowrap" }}>
                   {label}
                   {p==="group" && groupPlays.length>0 && <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, background: "#0ea5e9", borderRadius: "50%", boxShadow: "0 0 6px #0ea5e9" }} />}
                 </button>
@@ -2249,6 +2947,158 @@ export default function App() {
         )}
       </div>
 
+
+        {/* ═══ FUTURES PAGE ═══ */}
+        {page === "futures" && (
+          <div style={{ padding: "0 0 120px" }}>
+            <div style={{ padding: "20px 20px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Futures</div>
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>NCAA Tournament winner picks</div>
+                </div>
+                {isAdmin && (
+                  <button onClick={fetchFuturesOdds} disabled={futuresOddsLoading} style={{ background: "rgba(250,204,21,0.15)", border: "1px solid rgba(250,204,21,0.4)", borderRadius: 10, padding: "8px 14px", color: "#facc15", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.5, opacity: futuresOddsLoading ? 0.5 : 1 }}>
+                    {futuresOddsLoading ? "Loading..." : "Refresh Odds"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Group consensus card */}
+            {futuresPicks.length > 0 && (() => {
+              const counts = {};
+              futuresPicks.forEach(p => { counts[p.team] = (counts[p.team] || []).concat(p.username); });
+              const sorted = Object.entries(counts).sort((a,b) => b[1].length - a[1].length);
+              const top = sorted[0];
+              return top[1].length >= 2 ? (
+                <div style={{ margin: "16px 20px 0", background: "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(250,204,21,0.06))", border: "1px solid rgba(250,204,21,0.35)", borderRadius: 16, padding: "16px 20px" }}>
+                  <div style={{ fontSize: 10, color: "rgba(250,204,21,0.7)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Group Consensus</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{top[0]}</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 3 }}>
+                        {top[1].join(", ")}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 28, fontWeight: 900, color: "#facc15" }}>{top[1].length}</div>
+                      <div style={{ fontSize: 10, color: "rgba(250,204,21,0.6)", letterSpacing: 1 }}>AGREE</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* My picks */}
+            {myFuturesPicks.length > 0 && (
+              <div style={{ margin: "16px 20px 0" }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Your Picks</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {myFuturesPicks.map(p => (
+                    <div key={p.team} style={{ background: p.result === "win" ? "rgba(74,222,128,0.15)" : p.result === "loss" ? "rgba(248,113,113,0.1)" : "rgba(30,144,255,0.15)", border: `1px solid ${p.result === "win" ? "rgba(74,222,128,0.4)" : p.result === "loss" ? "rgba(248,113,113,0.35)" : "rgba(30,144,255,0.35)"}`, borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: p.result === "win" ? "#4ade80" : p.result === "loss" ? "#f87171" : "#bae6fd" }}>{p.team}</div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.odds}</div>
+                      {p.result === "win" && <div style={{ fontSize: 12 }}>✅</div>}
+                      {p.result === "loss" && <div style={{ fontSize: 12 }}>❌</div>}
+                      {!p.result && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>🔒</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* All picks by team */}
+            {futuresPicks.length > 0 && (() => {
+              const byTeam = {};
+              futuresPicks.forEach(p => {
+                if (!byTeam[p.team]) byTeam[p.team] = { pickers: [], result: p.result, odds: p.odds };
+                byTeam[p.team].pickers.push(p.username);
+              });
+              const hasAnyPicks = Object.keys(byTeam).length > 0;
+              return hasAnyPicks ? (
+                <div style={{ margin: "20px 20px 0" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>All Picks</div>
+                  {Object.entries(byTeam).sort((a,b) => b[1].pickers.length - a[1].pickers.length).map(([team, { pickers, result, odds }]) => (
+                    <div key={team} style={{ background: result === "win" ? "rgba(74,222,128,0.08)" : result === "loss" ? "rgba(248,113,113,0.06)" : "rgba(255,255,255,0.04)", border: `1px solid ${result === "win" ? "rgba(74,222,128,0.25)" : result === "loss" ? "rgba(248,113,113,0.2)" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "12px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: result === "win" ? "#4ade80" : result === "loss" ? "#f87171" : "#fff" }}>{team}</div>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", fontWeight: 600 }}>{odds}</div>
+                          {result === "win" && <div style={{ fontSize: 11, fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 6, padding: "2px 7px" }}>WIN</div>}
+                          {result === "loss" && <div style={{ fontSize: 11, fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 6, padding: "2px 7px" }}>OUT</div>}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {pickers.map(u => (
+                            <span key={u} onClick={() => openPlayerProfile(u)} style={{ background: "rgba(30,144,255,0.12)", border: "1px solid rgba(30,144,255,0.22)", borderRadius: 20, padding: "3px 10px", fontSize: 11, color: "#bae6fd", cursor: "pointer" }}>{u}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: pickers.length >= 2 ? "#facc15" : "rgba(255,255,255,0.4)" }}>{pickers.length}</div>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: 1 }}>PICK{pickers.length !== 1 ? "S" : ""}</div>
+                        {isAdmin && !result && (
+                          <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                            <button onClick={() => gradeFuture(team, "win")} style={{ background: "rgba(74,222,128,0.2)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: 6, color: "#4ade80", fontSize: 10, fontWeight: 700, padding: "3px 8px", cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>W</button>
+                            <button onClick={() => gradeFuture(team, "loss")} style={{ background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.35)", borderRadius: 6, color: "#f87171", fontSize: 10, fontWeight: 700, padding: "3px 8px", cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>OUT</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null;
+            })()}
+
+            {/* Team picker */}
+            {!viewerMode && (
+              <div style={{ margin: "20px 20px 0" }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>
+                  {futuresTeams.length > 0 ? "Pick a Team" : "No odds available yet"}
+                </div>
+                {futuresTeams.length > 0 && (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Search teams..."
+                      value={futuresSearch}
+                      onChange={e => setFuturesSearch(e.target.value)}
+                      style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "10px 14px", color: "#fff", fontSize: 13, fontFamily: "Outfit, sans-serif", outline: "none", marginBottom: 12 }}
+                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {futuresTeams
+                        .filter(t => t.team.toLowerCase().includes(futuresSearch.toLowerCase()))
+                        .map(t => {
+                          const alreadyPicked = myFuturesPicks.some(p => p.team === t.team);
+                          const pickerCount = futuresPicks.filter(p => p.team === t.team).length;
+                          return (
+                            <button key={t.team} onClick={() => !alreadyPicked && submitFuturesPick(t.team, t.odds)} style={{ background: alreadyPicked ? "rgba(30,144,255,0.18)" : "rgba(255,255,255,0.04)", border: `1px solid ${alreadyPicked ? "rgba(30,144,255,0.45)" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "13px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: alreadyPicked ? "default" : "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                {alreadyPicked && <div style={{ fontSize: 12 }}>🔒</div>}
+                                <div style={{ fontSize: 14, fontWeight: 600, color: alreadyPicked ? "#bae6fd" : "#fff", textAlign: "left" }}>{t.team}</div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                {pickerCount > 0 && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{pickerCount} picked</div>}
+                                <div style={{ fontSize: 13, fontWeight: 700, color: t.odds.startsWith("+") ? "#4ade80" : "#f87171" }}>{t.odds}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </>
+                )}
+                {futuresTeams.length === 0 && !futuresLoading && isAdmin && (
+                  <div style={{ textAlign: "center", padding: "30px 0", color: "rgba(255,255,255,0.25)", fontSize: 13 }}>
+                    Tap "Refresh Odds" to load tournament futures
+                  </div>
+                )}
+                {futuresLoading && (
+                  <div style={{ textAlign: "center", padding: "30px 0", color: "rgba(255,255,255,0.25)", fontSize: 13 }}>Loading...</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       {/* ── STICKY SUBMIT BAR ── */}
       {page === "picks" && !hasSubmitted && (
         <div className="glass-bottom" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200 }}>
