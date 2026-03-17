@@ -1613,7 +1613,7 @@ export default function App() {
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h,spreads_h1,totals_h1&oddsFormat=american&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -2266,10 +2266,11 @@ export default function App() {
 
   // ── Groups ───────────────────────────────────────────────────────────────────
   async function loadMyGroups(uid) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("group_members")
       .select("role, groups(id, name, invite_code)")
       .eq("user_id", uid);
+    console.log("[LockIn] loadMyGroups data:", JSON.stringify(data), "error:", error?.message);
     if (data && data.length > 0) {
       const groups = data.map(d => ({ ...d.groups, role: d.role }));
       setMyGroups(groups);
