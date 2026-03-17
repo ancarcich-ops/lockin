@@ -2117,11 +2117,13 @@ export default function App() {
   // ── Futures ─────────────────────────────────────────────────────────────────
   async function loadFutures() {
     setFuturesLoading(true);
-    // Load cached futures teams from group_results
+    // Load cached futures teams from group_results (newest row)
     const { data: cached } = await supabase
       .from("group_results")
       .select("result")
       .eq("key", "__futures_cache__")
+      .order("date", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (cached?.result) {
       try { setFuturesTeams(JSON.parse(cached.result)); } catch(e) {}
@@ -2143,34 +2145,55 @@ export default function App() {
     if (!apiKey) return;
     setFuturesOddsLoading(true);
     try {
-      const res = await fetch(
-        `https://api.the-odds-api.com/v4/sports/basketball_ncaab/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&dateFormat=iso`
-      );
-      if (!res.ok) { setFuturesOddsLoading(false); return; }
-      const data = await res.json();
-      // outrights returns events where each outcome is a team
-      const teamsMap = {};
-      data.forEach(event => {
-        const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
-        outrights?.outcomes?.forEach(o => {
-          if (!teamsMap[o.name]) {
-            const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
-            teamsMap[o.name] = { team: o.name, odds: price };
-          }
+      // Try NCAAB championship winner market first, fall back to regular outrights
+      const sports = ["basketball_ncaab_championship_winner", "basketball_ncaab"];
+      let teams = [];
+
+      for (const sport of sports) {
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american`
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        console.log(`[LockIn] futures ${sport} returned ${data.length} events`);
+        const teamsMap = {};
+        data.forEach(event => {
+          // outrights market
+          const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
+          outrights?.outcomes?.forEach(o => {
+            if (!teamsMap[o.name]) {
+              const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
+              teamsMap[o.name] = { team: o.name, odds: price };
+            }
+          });
+          // Also try h2h market in case it's structured differently
+          const h2h = event.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
+          h2h?.outcomes?.forEach(o => {
+            if (!teamsMap[o.name]) {
+              const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
+              teamsMap[o.name] = { team: o.name, odds: price };
+            }
+          });
         });
-      });
-      const teams = Object.values(teamsMap).sort((a, b) => {
-        // Sort by odds — favorites first
-        const aVal = parseInt(a.odds.replace('+',''));
-        const bVal = parseInt(b.odds.replace('+',''));
-        return aVal - bVal;
-      });
+        teams = Object.values(teamsMap).sort((a, b) => {
+          const aVal = parseInt(a.odds.replace('+',''));
+          const bVal = parseInt(b.odds.replace('+',''));
+          return aVal - bVal;
+        });
+        if (teams.length > 0) break; // got data, stop trying
+      }
+
+      console.log(`[LockIn] futures teams found: ${teams.length}`);
+
       if (teams.length > 0) {
         setFuturesTeams(teams);
-        await supabase.from("group_results").upsert(
-          { key: "__futures_cache__", result: JSON.stringify(teams), date: TODAY_DATE },
-          { onConflict: "key,date" }
+        // Delete old cache row and insert fresh (no date conflict)
+        await supabase.from("group_results").delete().eq("key", "__futures_cache__");
+        await supabase.from("group_results").insert(
+          { key: "__futures_cache__", result: JSON.stringify(teams), date: TODAY_DATE }
         );
+      } else {
+        console.warn("[LockIn] No futures teams returned from API");
       }
     } catch(e) { console.error("Futures fetch error:", e); }
     setFuturesOddsLoading(false);
