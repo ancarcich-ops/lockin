@@ -1417,6 +1417,8 @@ export default function App() {
   const [playResults, setPlayResults]       = useState({});
 
   // Futures
+  const [futuresPendingPick, setFuturesPendingPick] = useState(null); // { team, odds } awaiting confirm
+  const [futuresNote, setFuturesNote]               = useState("");
   const [futuresTeams, setFuturesTeams]         = useState([]); // [{team, odds}]
   const [futuresPicks, setFuturesPicks]         = useState([]); // all users' picks
   const [myFuturesPicks, setMyFuturesPicks]     = useState([]); // current user's picks
@@ -2202,7 +2204,7 @@ export default function App() {
     setFuturesOddsLoading(false);
   }
 
-  async function submitFuturesPick(team, odds) {
+  async function submitFuturesPick(team, odds, note) {
     if (!session || !username) return;
     const { data: profile } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
     if (!profile) return;
@@ -2211,11 +2213,14 @@ export default function App() {
       username,
       team,
       odds,
+      note: note?.trim() || null,
     });
     if (!error) {
-      const newPick = { user_id: profile.id, username, team, odds, result: null };
+      const newPick = { user_id: profile.id, username, team, odds, note: note?.trim() || null, result: null };
       setFuturesPicks(prev => [...prev, newPick]);
       setMyFuturesPicks(prev => [...prev, newPick]);
+      setFuturesPendingPick(null);
+      setFuturesNote("");
     }
   }
 
@@ -3022,12 +3027,15 @@ export default function App() {
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Your Picks</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {myFuturesPicks.map(p => (
-                    <div key={p.team} style={{ background: p.result === "win" ? "rgba(74,222,128,0.15)" : p.result === "loss" ? "rgba(248,113,113,0.1)" : "rgba(30,144,255,0.15)", border: `1px solid ${p.result === "win" ? "rgba(74,222,128,0.4)" : p.result === "loss" ? "rgba(248,113,113,0.35)" : "rgba(30,144,255,0.35)"}`, borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: p.result === "win" ? "#4ade80" : p.result === "loss" ? "#f87171" : "#bae6fd" }}>{p.team}</div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.odds}</div>
-                      {p.result === "win" && <div style={{ fontSize: 12 }}>✅</div>}
-                      {p.result === "loss" && <div style={{ fontSize: 12 }}>❌</div>}
-                      {!p.result && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>🔒</div>}
+                    <div key={p.team} style={{ background: p.result === "win" ? "rgba(74,222,128,0.12)" : p.result === "loss" ? "rgba(248,113,113,0.08)" : "rgba(30,144,255,0.12)", border: `1px solid ${p.result === "win" ? "rgba(74,222,128,0.35)" : p.result === "loss" ? "rgba(248,113,113,0.3)" : "rgba(30,144,255,0.3)"}`, borderRadius: 12, padding: "10px 14px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: p.result === "win" ? "#4ade80" : p.result === "loss" ? "#f87171" : "#bae6fd" }}>{p.team}</div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.odds}</div>
+                        {p.result === "win" && <div style={{ fontSize: 12 }}>✅</div>}
+                        {p.result === "loss" && <div style={{ fontSize: 12 }}>❌</div>}
+                        {!p.result && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>🔒</div>}
+                      </div>
+                      {p.note && <div style={{ fontSize: 11, color: "rgba(250,204,21,0.65)", marginTop: 4, fontStyle: "italic" }}>"{p.note}"</div>}
                     </div>
                   ))}
                 </div>
@@ -3055,9 +3063,15 @@ export default function App() {
                           {result === "loss" && <div style={{ fontSize: 11, fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 6, padding: "2px 7px" }}>OUT</div>}
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                          {pickers.map(u => (
-                            <span key={u} onClick={() => openPlayerProfile(u)} style={{ background: "rgba(30,144,255,0.12)", border: "1px solid rgba(30,144,255,0.22)", borderRadius: 20, padding: "3px 10px", fontSize: 11, color: "#bae6fd", cursor: "pointer" }}>{u}</span>
-                          ))}
+                          {pickers.map(u => {
+                            const pick = futuresPicks.find(p => p.username === u && p.team === team);
+                            return (
+                              <div key={u} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                <span onClick={() => openPlayerProfile(u)} style={{ background: "rgba(30,144,255,0.12)", border: "1px solid rgba(30,144,255,0.22)", borderRadius: 20, padding: "3px 10px", fontSize: 11, color: "#bae6fd", cursor: "pointer" }}>{u}</span>
+                                {pick?.note && <span style={{ fontSize: 10, color: "rgba(250,204,21,0.6)", fontStyle: "italic", paddingLeft: 4 }}>"{pick.note}"</span>}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
@@ -3098,7 +3112,7 @@ export default function App() {
                           const alreadyPicked = myFuturesPicks.some(p => p.team === t.team);
                           const pickerCount = futuresPicks.filter(p => p.team === t.team).length;
                           return (
-                            <button key={t.team} onClick={() => !alreadyPicked && submitFuturesPick(t.team, t.odds)} style={{ background: alreadyPicked ? "rgba(30,144,255,0.18)" : "rgba(255,255,255,0.04)", border: `1px solid ${alreadyPicked ? "rgba(30,144,255,0.45)" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "13px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: alreadyPicked ? "default" : "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
+                            <button key={t.team} onClick={() => { if(!alreadyPicked){ setFuturesPendingPick({team:t.team,odds:t.odds}); setFuturesNote(""); }}} style={{ background: alreadyPicked ? "rgba(30,144,255,0.18)" : futuresPendingPick?.team===t.team ? "rgba(30,144,255,0.25)" : "rgba(255,255,255,0.04)", border: `1px solid ${alreadyPicked ? "rgba(30,144,255,0.45)" : futuresPendingPick?.team===t.team ? "rgba(30,144,255,0.6)" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "13px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: alreadyPicked ? "default" : "pointer", fontFamily: "Outfit, sans-serif", transition: "all 0.15s" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 {alreadyPicked && <div style={{ fontSize: 12 }}>🔒</div>}
                                 <div style={{ fontSize: 14, fontWeight: 600, color: alreadyPicked ? "#bae6fd" : "#fff", textAlign: "left" }}>{t.team}</div>
@@ -3121,6 +3135,51 @@ export default function App() {
                 {futuresLoading && (
                   <div style={{ textAlign: "center", padding: "30px 0", color: "rgba(255,255,255,0.25)", fontSize: 13 }}>Loading...</div>
                 )}
+              </div>
+            )}
+
+            {/* Confirmation sheet */}
+            {futuresPendingPick && (
+              <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setFuturesPendingPick(null)}>
+                <div onClick={e => e.stopPropagation()} style={{ background: "#0d0b1e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 520, padding: "24px 24px 40px" }}>
+                  <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 22px" }} />
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Lock In Future</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>{futuresPendingPick.team}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: futuresPendingPick.odds.startsWith("+") ? "#4ade80" : "#f87171" }}>{futuresPendingPick.odds}</div>
+                  </div>
+
+                  {/* Warning */}
+                  <div style={{ background: "rgba(250,204,21,0.08)", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div style={{ fontSize: 16, flexShrink: 0 }}>⚠️</div>
+                    <div style={{ fontSize: 12, color: "rgba(250,204,21,0.8)", lineHeight: 1.5 }}>
+                      Futures picks are <strong>permanent</strong>. You cannot change or remove this pick after submitting.
+                    </div>
+                  </div>
+
+                  {/* Note */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>(optional)</span></div>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      placeholder="Why are you riding with them?"
+                      value={futuresNote}
+                      onChange={e => setFuturesNote(e.target.value)}
+                      style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 13, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button onClick={() => setFuturesPendingPick(null)} style={{ flex: 1, padding: "13px 0", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "rgba(255,255,255,0.5)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>
+                      Cancel
+                    </button>
+                    <button onClick={() => submitFuturesPick(futuresPendingPick.team, futuresPendingPick.odds, futuresNote)} style={{ flex: 2, padding: "13px 0", background: "linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.35))", border: "1px solid rgba(30,144,255,0.55)", borderRadius: 12, color: "#e0f2fe", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>
+                      🔒 Lock It In
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
