@@ -1457,6 +1457,18 @@ export default function App() {
   const [adminInput, setAdminInput]         = useState("");
   const [adminError, setAdminError]         = useState(false);
 
+  // ── Read ?join= URL param on mount ───────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinParam = params.get("join");
+    if (joinParam) {
+      setJoinCode(joinParam.toUpperCase());
+      setShowJoinGroup(true);
+      // Clean the URL without reloading
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // ── Auth init ────────────────────────────────────────────────────────────
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1737,7 +1749,7 @@ export default function App() {
 
     // Load all-time record - only rows with graded results
     let allTimeQuery2 = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
-    if (activeGroup?.id) allTimeQuery2 = allTimeQuery2.eq("group_id", activeGroup.id);
+    if (groupId) allTimeQuery2 = allTimeQuery2.eq("group_id", groupId);
     const { data: allResultsRows } = await allTimeQuery2;
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
@@ -2106,10 +2118,9 @@ export default function App() {
       }
     }
     // Refresh all-time record
-    const { data: allResultsRows } = await supabase
-      .from("group_results")
-      .select("result")
-      .in("result", ["win", "loss", "push"]);
+    let atQuery = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    if (activeGroup?.id) atQuery = atQuery.eq("group_id", activeGroup.id);
+    const { data: allResultsRows } = await atQuery;
     if (allResultsRows) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       allResultsRows.forEach(row => {
@@ -2757,7 +2768,10 @@ export default function App() {
                 <span style={{ fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:2, textTransform:"uppercase" }}>Invite Code</span>
                 <span style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,0.7)", letterSpacing:3 }}>{activeGroup.invite_code}</span>
               </div>
-              <button onClick={() => navigator.clipboard.writeText(activeGroup.invite_code).then(() => {})} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy</button>
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={() => navigator.clipboard.writeText(activeGroup.invite_code)} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy Code</button>
+                <button onClick={() => navigator.clipboard.writeText(`https://lock-in-picks.com?join=${activeGroup.invite_code}`)} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy Link</button>
+              </div>
             </div>
           </div>
         )}
