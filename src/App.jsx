@@ -1704,7 +1704,7 @@ export default function App() {
   useEffect(() => {
     if (viewerMode) { loadData(null); return; }
     if (!session || !username) return;
-    if (activeGroup) loadData(username, activeGroup.id);
+    loadData(username, activeGroup?.id || null);
   }, [session, username, viewerMode, activeGroup]);
 
   async function loadData(activeUsername, gid) {
@@ -2269,6 +2269,11 @@ export default function App() {
       const last = groups.find(g => g.id === lastId) || groups[0];
       setActiveGroup(last);
       setGroupSetupDone(true);
+      // Reload data with the correct group now that we know it
+      if (last && username) {
+        loadData(username, last.id);
+        loadOddsFromCache(last.id);
+      }
       return last;
     }
     setGroupSetupDone(true);
