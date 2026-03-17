@@ -1931,9 +1931,14 @@ export default function App() {
   // ── Realtime ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return;
-    const picksSub = supabase.channel("picks-changes")
+    const gid = activeGroup?.id || null;
+    const channelSuffix = gid || "all";
+
+    const picksSub = supabase.channel(`picks-changes-${channelSuffix}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
-        supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE).then(({ data }) => {
+        let q = supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE);
+        if (gid) q = q.eq("group_id", gid);
+        q.then(({ data }) => {
           if (data) {
             const built = {};
             data.forEach(row => {
@@ -1944,9 +1949,11 @@ export default function App() {
         });
       }).subscribe();
 
-    const resultsSub = supabase.channel("results-changes")
+    const resultsSub = supabase.channel(`results-changes-${channelSuffix}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "group_results" }, () => {
-        supabase.from("group_results").select("key, result").eq("date", TODAY_DATE).then(({ data }) => {
+        let q = supabase.from("group_results").select("key, result").eq("date", TODAY_DATE);
+        if (gid) q = q.eq("group_id", gid);
+        q.then(({ data }) => {
           if (data) {
             const built = {};
             data.forEach(row => { built[row.key] = row.result; });
@@ -1960,7 +1967,7 @@ export default function App() {
       supabase.removeChannel(picksSub);
       supabase.removeChannel(resultsSub);
     };
-  }, [session, username]);
+  }, [session, username, activeGroup?.id]);
 
   // ── Admin ─────────────────────────────────────────────────────────────────
   function handleLogoTap() {
