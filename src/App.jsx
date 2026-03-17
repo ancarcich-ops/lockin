@@ -3163,7 +3163,7 @@ export default function App() {
                     <input
                       type="text"
                       maxLength={120}
-                      placeholder="Why are you riding with them?"
+                      placeholder="Optional — enter your real line or strategy for this pick"
                       value={futuresNote}
                       onChange={e => setFuturesNote(e.target.value)}
                       style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 13, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
