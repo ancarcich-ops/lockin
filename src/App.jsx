@@ -1570,14 +1570,9 @@ export default function App() {
 
   // ── Fetch odds ───────────────────────────────────────────────────────────
   // Load from cache on session start - admin can manually refresh via button
-  const oddsFetchedRef = useRef(null); // stores last group_id fetched
   useEffect(() => {
     if (!session && !viewerMode) return;
-    const gid = activeGroup?.id || null;
-    // Skip if already fetched for this group
-    if (oddsFetchedRef.current === gid) return;
-    oddsFetchedRef.current = gid;
-    loadOddsFromCache(gid);
+    loadOddsFromCache(activeGroup?.id || null);
   }, [session, viewerMode, activeGroup?.id]);
 
   async function loadOddsFromCache(gid) {
@@ -2341,7 +2336,7 @@ export default function App() {
     setPlayResults({}); setGames([]); setRecord({ wins:0,losses:0,pushes:0 });
     setAllTimeRecord({ wins:0,losses:0,pushes:0 });
     setFuturesPicks([]); setMyFuturesPicks([]); setFuturesTeams([]);
-    oddsFetchedRef.current = null;
+    
     loadData(username, group.id);
     loadOddsFromCache(group.id);
   }
@@ -2539,7 +2534,7 @@ export default function App() {
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           <div style={{ height: 1, background: "rgba(255,255,255,0.07)", marginBottom: 16 }} />
-          <button onClick={() => { oddsFetchedRef.current = null; setViewerMode(true); setPage("group"); loadOddsFromCache(); loadData(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
+          <button onClick={() => {  setViewerMode(true); setPage("group"); loadOddsFromCache(); loadData(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
             👀 Watch without an account
           </button>
         </div>
