@@ -55,7 +55,7 @@ const TODAY_LABEL = new Date().toLocaleDateString("en-US", {
 });
 
 // Use Eastern time for date so cache key is consistent all day in US
-const TODAY_DATE = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }); // YYYY-MM-DD
+const TODAY_DATE = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD in ET
 
 const ADMIN_PASSWORD = "football4";
 
@@ -1621,7 +1621,10 @@ export default function App() {
         );
         if (!res.ok) continue;
         const data = await res.json();
-        const todayGames = data.filter(g => g.commence_time.startsWith(TODAY_DATE));
+        const todayGames = data.filter(g => {
+          const etDate = new Date(g.commence_time).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+          return etDate === TODAY_DATE;
+        });
         todayGames.forEach((g) => {
           const h2h = g.bookmakers?.[0]?.markets?.find(m => m.key === "h2h");
           const spreads = g.bookmakers?.[0]?.markets?.find(m => m.key === "spreads");
