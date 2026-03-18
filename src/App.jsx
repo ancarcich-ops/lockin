@@ -1583,12 +1583,21 @@ export default function App() {
   async function loadOddsFromCache(gid) {
     const groupId = gid || activeGroup?.id;
     try {
-      const { data: cached } = await supabase
-        .from("group_results")
-        .select("result")
-        .eq("key", `__odds_cache__${TODAY_DATE}`)
-        .eq("date", TODAY_DATE)
-        .maybeSingle();
+      // Try with group_id first, fall back to any row for today (handles null group_id)
+      let cached = null;
+      if (groupId) {
+        const { data } = await supabase.from("group_results").select("result")
+          .eq("key", `__odds_cache__${TODAY_DATE}`).eq("date", TODAY_DATE)
+          .eq("group_id", groupId).maybeSingle();
+        cached = data;
+      }
+      // Fallback: no group filter (works for null group_id rows and no-group users)
+      if (!cached) {
+        const { data } = await supabase.from("group_results").select("result")
+          .eq("key", `__odds_cache__${TODAY_DATE}`).eq("date", TODAY_DATE)
+          .maybeSingle();
+        cached = data;
+      }
       if (cached?.result) {
         const cachedGames = JSON.parse(cached.result);
         if (cachedGames?.length > 0) {
