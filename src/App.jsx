@@ -1843,7 +1843,7 @@ export default function App() {
   // Auto-advance celebration - missile sequence takes ~3.2s before settle
   useEffect(() => {
     if (showCelebration && celebrationPhase === "explode") {
-      const t = setTimeout(() => setCelebrationPhase("settle"), 3200);
+      const t = setTimeout(() => setCelebrationPhase("settle"), 5500);
       return () => clearTimeout(t);
     }
   }, [showCelebration, celebrationPhase]);
