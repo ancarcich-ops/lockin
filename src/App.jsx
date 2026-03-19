@@ -578,390 +578,88 @@ function LossCelebration({ losses, onDismiss }) {
 }
 
 function WinCelebration({ wins, phase, onDismiss }) {
-  const canvasRef = useRef(null);
-  const animRef = useRef(null);
-  const timersRef = useRef([]);
-
-  function T(fn, ms) { timersRef.current.push(setTimeout(fn, ms)); }
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
-
-    // Target - upper right quadrant
-    const tgtX = W * 0.72, tgtY = H * 0.28;
-    // Missile start - lower left
-    const msX0 = W * 0.10, msY0 = H * 0.82;
-
-    let animPhase = "hunt";
-    let rX = tgtX + W * 0.15, rY = tgtY + H * 0.12;
-    let rSize = 60, lockProgress = 0;
-    let lockedAt = 0, fireAt = 0;
-    let trail = [], particles = [], rings = [];
-    let shakeAmt = 0, flashAlpha = 0, flashColor = [255,255,255];
-    let lockedFired = false, impactFired = false;
-    let overlayAlpha = 0, showSettle = false;
-    // Nuke state
-    const nukeGroundX = W * 0.5;
-    const nukeGroundY = H + 20;
-    let nukeStart = 0, nukeActive = false, nukeAlpha = 1, nukeFadingOut = false;
-    let nukeShockwaves = [], nukeDebris = [];
-    let whiteoutAlpha = 0, whiteoutPhase = 'none';
-
-    function lerp(a,b,t){ return a+(b-a)*t; }
-    function ease(t){ return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
-
-    function triggerFlash(r,g,b,a){ flashAlpha=a; flashColor=[r,g,b]; }
-    function triggerShake(amt){ shakeAmt=Math.max(shakeAmt,amt); }
-
-    function spawnExplosion(x, y) {
-      const COLORS = ["#facc15","#fb923c","#f87171","#ffffff","#fde68a","#ff6600","#4ade80","#60a5fa","#fcd34d"];
-      // 200 particles from impact point
-      for (let i = 0; i < 200; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 6 + Math.random() * 22;
-        particles.push({
-          x, y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - Math.random() * 8,
-          size: 2 + Math.random() * 7,
-          color: COLORS[Math.floor(Math.random() * COLORS.length)],
-          alpha: 1,
-          decay: 0.008 + Math.random() * 0.012,
-          gravity: 0.22 + Math.random() * 0.15,
-          rotSpeed: (Math.random() - 0.5) * 0.35,
-          rotation: Math.random() * Math.PI * 2,
-          isRect: Math.random() > 0.38,
-          w: 3 + Math.random() * 10,
-          h: 6 + Math.random() * 16,
-          trail: [],
-        });
-      }
-      // Big shockwave rings from impact
-      const maxR = Math.max(W, H) * 1.1;
-      rings = [
-        { x, y, r:0, maxR: maxR*0.9, alpha:1.0, color:[255,220,60],  lw:5,  spd:28, delay:0   },
-        { x, y, r:0, maxR: maxR*0.75,alpha:0.8, color:[255,140,30],  lw:10, spd:20, delay:60  },
-        { x, y, r:0, maxR: maxR*0.6, alpha:0.6, color:[255,80,0],    lw:7,  spd:24, delay:100 },
-        { x, y, r:0, maxR: maxR*0.5, alpha:0.4, color:[255,255,255], lw:3,  spd:32, delay:140 },
-        { x, y, r:0, maxR: maxR*0.4, alpha:0.3, color:[255,220,60],  lw:2,  spd:18, delay:200 },
-      ];
-      rings.forEach(r=>{ r.started=false; r.startT=null; });
-    }
-
-    function drawMissile(cx, cy, angleDeg) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angleDeg * Math.PI / 180);
-      const s = 1.1;
-      ctx.fillStyle="#c8d0d8";
-      ctx.beginPath();
-      ctx.moveTo(0,-20*s); ctx.lineTo(7*s,-7*s); ctx.lineTo(7*s,12*s); ctx.lineTo(-7*s,12*s); ctx.lineTo(-7*s,-7*s);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#e8edf2";
-      ctx.beginPath();
-      ctx.moveTo(0,-20*s); ctx.lineTo(7*s,-7*s); ctx.lineTo(-7*s,-7*s);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#a0a8b4";
-      ctx.beginPath(); ctx.moveTo(7*s,5*s); ctx.lineTo(16*s,16*s); ctx.lineTo(7*s,12*s); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-7*s,5*s); ctx.lineTo(-16*s,16*s); ctx.lineTo(-7*s,12*s); ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#fb923c"; ctx.beginPath(); ctx.ellipse(0,14*s,5*s,5*s,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#facc15"; ctx.beginPath(); ctx.ellipse(0,17*s,3*s,6*s,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.ellipse(0,19*s,1.5*s,3.5*s,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#60a5fa"; ctx.beginPath(); ctx.arc(0,-9*s,3*s,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-
-    function drawReticle(x, y, sz, locked, lockProg) {
-      const col = locked ? "#f87171" : lockProg > 0.5 ? "#facc15" : "#4ade80";
-      ctx.save();
-      ctx.globalAlpha = 0.95;
-      // outer dashed ring
-      ctx.beginPath(); ctx.arc(x,y,sz,0,Math.PI*2);
-      ctx.setLineDash([8,5]); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
-      // corner brackets closing in
-      const br = sz * 0.65;
-      const blen = sz * 0.38;
-      const bOff = sz * 0.28 * (1 - lockProg);
-      [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy])=>{
-        const bx=x+sx*(br+bOff), by=y+sy*(br+bOff);
-        ctx.beginPath(); ctx.moveTo(bx+sx*blen,by); ctx.lineTo(bx,by); ctx.lineTo(bx,by+sy*blen);
-        ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.stroke();
-      });
-      // crosshair lines
-      ctx.strokeStyle=col; ctx.lineWidth=1.5;
-      const g2=10;
-      [[x,y-g2,x,y-sz*0.72],[x,y+g2,x,y+sz*0.72],[x-g2,y,x-sz*0.72,y],[x+g2,y,x+sz*0.72,y]].forEach(([x1,y1,x2,y2])=>{
-        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-      });
-      // center dot
-      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fillStyle=col; ctx.fill();
-      // lock progress arc
-      if(lockProg>0){
-        ctx.beginPath(); ctx.arc(x,y,sz+8,-Math.PI/2,-Math.PI/2+lockProg*Math.PI*2);
-        ctx.strokeStyle="#f87171"; ctx.lineWidth=4; ctx.stroke();
-      }
-      // Iran flag circle
-      ctx.save();
-      ctx.beginPath(); ctx.arc(x,y,sz*0.52,0,Math.PI*2); ctx.clip();
-      ctx.fillStyle="#239f40"; ctx.fillRect(x-sz*0.52,y-sz*0.52,sz*1.04,sz*0.35);
-      ctx.fillStyle="#fff";    ctx.fillRect(x-sz*0.52,y-sz*0.17,sz*1.04,sz*0.34);
-      ctx.fillStyle="#da0000"; ctx.fillRect(x-sz*0.52,y+sz*0.17,sz*1.04,sz*0.35);
-      ctx.restore();
-      ctx.beginPath(); ctx.arc(x,y,sz*0.52,0,Math.PI*2);
-      ctx.strokeStyle=`rgba(255,255,255,0.25)`; ctx.lineWidth=1; ctx.stroke();
-      if(locked){
-        ctx.font=`bold 11px 'Courier New'`; ctx.fillStyle="#f87171"; ctx.textAlign="center";
-        ctx.globalAlpha=0.5+0.5*Math.sin(Date.now()*0.025);
-        ctx.fillText("LOCKED",x,y+sz+20);
-      }
-      ctx.restore();
-    }
-
-    const startTime = performance.now();
-
-    function tick(now) {
-      const el = now - startTime;
-      ctx.clearRect(0,0,W,H);
-
-      const sx = shakeAmt>0.3?(Math.random()-0.5)*shakeAmt:0;
-      const sy = shakeAmt>0.3?(Math.random()-0.5)*shakeAmt:0;
-      shakeAmt *= 0.8;
-      ctx.save(); ctx.translate(sx,sy);
-
-      // flash
-      if(flashAlpha>0.01){
-        const [fr,fg,fb]=flashColor;
-        ctx.fillStyle=`rgba(${fr},${fg},${fb},${flashAlpha})`;
-        ctx.fillRect(-50,-50,W+100,H+100);
-        flashAlpha*=0.72;
-      }
-
-      // shockwave rings
-      rings.forEach(ring=>{
-        if(ring.delay && el < ring.delay+1000) {
-          const re = el - 1000;
-          if(re < ring.delay) return;
-        }
-        if(!ring.started){ ring.started=true; ring.startT=now; }
-        ring.r=Math.min(ring.r+ring.spd,ring.maxR);
-        const a=ring.alpha*(1-ring.r/ring.maxR);
-        if(a>0.008){
-          ctx.beginPath(); ctx.arc(ring.x,ring.y,ring.r,0,Math.PI*2);
-          ctx.strokeStyle=`rgba(${ring.color[0]},${ring.color[1]},${ring.color[2]},${a})`;
-          ctx.lineWidth=ring.lw; ctx.stroke();
-          // secondary glow ring
-          ctx.beginPath(); ctx.arc(ring.x,ring.y,ring.r,0,Math.PI*2);
-          ctx.strokeStyle=`rgba(${ring.color[0]},${ring.color[1]},${ring.color[2]},${a*0.3})`;
-          ctx.lineWidth=ring.lw*4; ctx.stroke();
-        }
-      });
-
-      // particles
-      let alive=0;
-      for(const p of particles){
-        if(p.alpha<=0.015) continue; alive++;
-        p.trail.push({x:p.x,y:p.y});
-        if(p.trail.length>5) p.trail.shift();
-        for(let ti=1;ti<p.trail.length;ti++){
-          const pr=p.trail[ti-1],qr=p.trail[ti];
-          const prog=ti/p.trail.length;
-          ctx.beginPath();ctx.moveTo(pr.x,pr.y);ctx.lineTo(qr.x,qr.y);
-          ctx.strokeStyle=p.color; ctx.globalAlpha=p.alpha*prog*0.3; ctx.lineWidth=p.size*0.5; ctx.stroke();
-          ctx.globalAlpha=1;
-        }
-        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rotation); ctx.globalAlpha=p.alpha; ctx.fillStyle=p.color;
-        if(p.isRect){ ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); }
-        else{ ctx.beginPath();ctx.arc(0,0,p.size,0,Math.PI*2);ctx.fill(); }
-        ctx.restore();
-        p.x+=p.vx; p.y+=p.vy; p.vy+=p.gravity; p.vx*=0.985;
-        p.rotation+=p.rotSpeed; p.alpha-=p.decay;
-      }
-
-      // HUNT phase
-      if(animPhase==="hunt"){
-        const huntT=Math.min(el/1000,1);
-        const wobble=1-huntT;
-        rX=lerp(rX,tgtX+Math.sin(el*0.003)*40*wobble,0.035+huntT*0.04);
-        rY=lerp(rY,tgtY+Math.cos(el*0.0025)*30*wobble,0.035+huntT*0.04);
-        rSize=lerp(rSize,36,0.025);
-        drawReticle(rX,rY,rSize,false,0);
-        if(huntT>=1){ animPhase="locking"; lockedAt=now; }
-
-      } else if(animPhase==="locking"){
-        const lt=Math.min((now-lockedAt)/700,1);
-        lockProgress=lt;
-        rX=lerp(rX,tgtX,0.10+lt*0.12);
-        rY=lerp(rY,tgtY,0.10+lt*0.12);
-        rSize=lerp(rSize,32,0.05);
-        drawReticle(rX,rY,rSize,lt>0.95,lt);
-        if(lt>0.45&&lt<0.5){ triggerFlash(248,113,113,0.4); triggerShake(8); }
-        if(lt>0.78&&lt<0.83){ triggerFlash(248,113,113,0.6); triggerShake(10); }
-        if(lt>=1){
-          animPhase="locked"; lockedFired=true;
-          fireAt=now+500;
-          triggerFlash(255,80,80,0.7); triggerShake(14);
-        }
-
-      } else if(animPhase==="locked"){
-        drawReticle(tgtX,tgtY,32,true,1);
-        if(now>=fireAt){ animPhase="fire"; }
-
-      } else if(animPhase==="fire"){
-        drawReticle(tgtX,tgtY,32,true,1);
-        const ft=Math.min((now-fireAt)/700,1);
-        const et=ease(ft);
-        const cpX=tgtX-W*0.18, cpY=Math.min(msY0,tgtY)-H*0.35;
-        const mx=(1-et)*(1-et)*msX0+2*(1-et)*et*cpX+et*et*tgtX;
-        const my=(1-et)*(1-et)*msY0+2*(1-et)*et*cpY+et*et*tgtY;
-        const ft2=Math.min(ft+0.015,1); const et2=ease(ft2);
-        const nx=(1-et2)*(1-et2)*msX0+2*(1-et2)*et2*cpX+et2*et2*tgtX;
-        const ny=(1-et2)*(1-et2)*msY0+2*(1-et2)*et2*cpY+et2*et2*tgtY;
-        const angle=Math.atan2(ny-my,nx-mx)*(180/Math.PI)+90;
-        trail.push({x:mx,y:my});
-        if(trail.length>55) trail.shift();
-        for(let ti=1;ti<trail.length;ti++){
-          const p=trail[ti-1],q=trail[ti];
-          const prog=ti/trail.length;
-          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
-          ctx.strokeStyle=`rgba(250,180,30,${prog*0.9})`; ctx.lineWidth=1.5+prog*4.5; ctx.stroke();
-          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
-          ctx.strokeStyle=`rgba(255,255,200,${prog*0.55})`; ctx.lineWidth=prog*2; ctx.stroke();
-        }
-        drawMissile(mx,my,angle);
-        if(ft>=1 && !impactFired){
-          impactFired=true; animPhase="exploding";
-          triggerFlash(255,255,220,1.0); triggerShake(28);
-          T(()=>{ triggerFlash(255,180,30,0.7); triggerShake(20); },100);
-          T(()=>{ triggerFlash(255,100,0,0.5); triggerShake(14); },220);
-          // Nuke rises from bottom
-          T(()=>{ spawnNuke(); triggerShake(30); },350);
-          T(()=>{ whiteoutPhase='peak'; },1800);
-          T(()=>{ whiteoutPhase='fading'; },2600);
-          T(()=>{ nukeFadingOut=true; },3200);
-          // Confetti rains from top after nuke fully gone
-          T(()=>{ spawnConfettiRain(); },4400);
-          T(()=>{ overlayAlpha=0; showSettle=true; },5200);
-        }
-      } else if(animPhase==="exploding"){
-        // fireball at impact
-        const fbt=Math.min((now-fireAt-700)/800,1);
-        if(fbt<1){
-          const fbSize=(1-fbt)*Math.min(W,H)*0.45;
-          const grad=ctx.createRadialGradient(tgtX,tgtY,0,tgtX,tgtY,fbSize);
-          grad.addColorStop(0,`rgba(255,255,255,${(1-fbt)*0.9})`);
-          grad.addColorStop(0.15,`rgba(255,240,100,${(1-fbt)*0.8})`);
-          grad.addColorStop(0.35,`rgba(255,140,20,${(1-fbt)*0.7})`);
-          grad.addColorStop(0.6,`rgba(220,60,0,${(1-fbt)*0.5})`);
-          grad.addColorStop(1,"transparent");
-          ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
-        }
-      }
-
-      // Nuke cloud + whiteout
-      if(nukeActive){
-        if(nukeFadingOut) nukeAlpha = Math.max(0, nukeAlpha - 0.018);
-        if(nukeAlpha <= 0){ nukeActive = false; }
-        const nt = (now-nukeStart)/2800;
-        ctx.save(); ctx.globalAlpha = nukeAlpha;
-        nukeShockwaves.forEach(sw=>{
-          sw.r += sw.spd;
-          if(sw.r>sw.maxR)return;
-          const a=sw.alpha*(1-sw.r/sw.maxR);
-          if(a<0.005)return;
-          ctx.save();ctx.globalAlpha=nukeAlpha*a;
-          ctx.beginPath();ctx.arc(nukeGroundX,nukeGroundY,sw.r,0,Math.PI*2);
-          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a})`;
-          ctx.lineWidth=sw.lw*(1-sw.r/sw.maxR)+1;ctx.stroke();
-          ctx.lineWidth=(sw.lw*(1-sw.r/sw.maxR)+1)*4;
-          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a*0.2})`;
-          ctx.stroke();
-          ctx.restore();
-        });
-        nukeDebris.forEach(p=>{
-          p.x+=p.vx*0.016*60;p.y+=p.vy*0.016*60;
-          p.vy+=0.08*0.016*60;p.vx*=0.98;
-          p.alpha-=(0.016/p.life)*0.7;p.rot+=p.rotSpd;
-          if(p.alpha<=0)return;
-          ctx.save();ctx.globalAlpha=Math.max(0,p.alpha)*nukeAlpha;
-          ctx.translate(p.x,p.y);ctx.rotate(p.rot);
-          ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
-          ctx.restore();
-        });
-        drawNuke(nt);
-        ctx.restore();
-        if(whiteoutPhase==='rising') whiteoutAlpha = Math.min(whiteoutAlpha+0.02, 0.95);
-        else if(whiteoutPhase==='peak') whiteoutAlpha = 0.92+Math.sin(now*0.004)*0.06;
-        else if(whiteoutPhase==='fading'){ whiteoutAlpha=Math.max(0,whiteoutAlpha-0.01); if(whiteoutAlpha<=0)whiteoutPhase='none'; }
-        drawWhiteout();
-      }
-
-      // dark overlay fade-in for settle screen
-      if(showSettle && overlayAlpha<0.82){
-        overlayAlpha=Math.min(overlayAlpha+0.02,0.82);
-        ctx.fillStyle=`rgba(0,0,0,${overlayAlpha})`;
-        ctx.fillRect(0,0,W,H);
-      } else if(showSettle){
-        ctx.fillStyle="rgba(0,0,0,0.82)";
-        ctx.fillRect(0,0,W,H);
-      }
-
-      ctx.restore();
-      if(alive>0||flashAlpha>0.01||rings.some(r=>r.r<r.maxR)||animPhase==="hunt"||animPhase==="locking"||animPhase==="locked"||animPhase==="fire"||animPhase==="exploding"){
-        animRef.current=requestAnimationFrame(tick);
-      }
-    }
-
-    animRef.current = requestAnimationFrame(tick);
-    return () => {
-      if(animRef.current) cancelAnimationFrame(animRef.current);
-      timersRef.current.forEach(clearTimeout);
-    };
-  }, []);
-
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:1000, cursor:"pointer" }} onClick={onDismiss}>
-      <canvas ref={canvasRef} style={{ position:"absolute", inset:0, pointerEvents:"none" }} />
-      {phase === "settle" && (
-        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
-          <div style={{ textAlign:"center", maxWidth:400, width:"100%", animation:"cel-settle 0.6s cubic-bezier(0.34,1.4,0.64,1) forwards" }}>
-            <div style={{ fontSize:72, lineHeight:1, marginBottom:12, filter:"drop-shadow(0 0 24px rgba(250,204,21,0.9))" }}>
-              {wins.length > 1 ? "🏆" : "✅"}
-            </div>
-            <div style={{ fontSize: wins.length > 1 ? 28 : 36, fontWeight:800, color:"#facc15", letterSpacing:-1, marginBottom:4, textShadow:"0 0 40px rgba(250,204,21,0.5)" }}>
-              {wins.length === 1 ? "CASH IT" : `${wins.length}× WINNER`}
-            </div>
-            <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:28, letterSpacing:0.5 }}>
-              GROUP PLAY{wins.length > 1 ? "S" : ""} GRADED
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {wins.map((w, i) => (
-                <div key={w.key} style={{
-                  background:"linear-gradient(135deg, rgba(74,222,128,0.18), rgba(74,222,128,0.08))",
-                  border:"1px solid rgba(74,222,128,0.45)",
-                  borderRadius:16, padding:"16px 22px",
-                  animation:`cel-card 0.45s cubic-bezier(0.34,1.2,0.64,1) ${0.1+i*0.12}s both`,
-                  boxShadow:"0 4px 24px rgba(74,222,128,0.15)",
-                  display:"flex", alignItems:"center", gap:14
-                }}>
-                  <div style={{ fontSize:22, flexShrink:0 }}>💰</div>
-                  <div style={{ textAlign:"left" }}>
-                    <div style={{ fontSize:15, fontWeight:700, color:"#86efac", lineHeight:1.3 }}>{w.label}</div>
-                    <div style={{ fontSize:11, color:"rgba(134,239,172,0.5)", marginTop:3, letterSpacing:0.3 }}>WINNER</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginTop:28, fontSize:11, color:"rgba(255,255,255,0.18)", letterSpacing:1, textTransform:"uppercase" }}>
-              Tap to continue
-            </div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: phase === "explode" ? "rgba(0,0,0,0.95)" : "rgba(0,0,0,0.85)", cursor: "pointer" }} onClick={onDismiss}>
+
+      {phase === "explode" && <>
+        {/* Flash */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #fff 0%, #ffdd00 30%, transparent 70%)", animation: "flash 0.8s ease-out forwards", pointerEvents: "none" }} />
+
+        {/* Shockwaves */}
+        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "4px solid rgba(255,180,0,0.8)", animation: "shockwave 1.2s ease-out 0.1s forwards", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "8px solid rgba(255,100,0,0.6)", animation: "shockwave2 1.6s ease-out 0.2s forwards", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.5)", animation: "shockwave 2s ease-out 0.4s forwards", pointerEvents: "none" }} />
+
+        {/* Fireball core */}
+        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, #fff 0%, #ffdd00 25%, #ff6600 55%, #cc2200 80%, transparent 100%)", animation: "fireball 1.4s ease-out forwards", boxShadow: "0 0 60px 30px rgba(255,100,0,0.6), 0 0 120px 60px rgba(255,50,0,0.3)", pointerEvents: "none" }} />
+
+        {/* Debris particles */}
+        {[...Array(18)].map((_, i) => {
+          const angle = (i / 18) * 360;
+          const dist = 120 + Math.random() * 180;
+          const dx = Math.cos(angle * Math.PI / 180) * dist;
+          const dy = Math.sin(angle * Math.PI / 180) * dist;
+          const size = 4 + Math.random() * 8;
+          const colors = ["#ffdd00","#ff6600","#ff3300","#ffaa00","#ffffff"];
+          const color = colors[i % colors.length];
+          const delay = Math.random() * 0.3;
+          return (
+            <div key={i} style={{
+              position: "absolute", width: size, height: size,
+              borderRadius: Math.random() > 0.5 ? "50%" : "2px",
+              background: color,
+              "--dx": `${dx}px`, "--dy": `${dy}px`,
+              "--rot": `${Math.random() * 720 - 360}deg`,
+              animation: `debris 1.2s ease-out ${delay}s forwards`,
+              boxShadow: `0 0 ${size}px ${color}`,
+              pointerEvents: "none"
+            }} />
+          );
+        })}
+
+        {/* Mushroom stem */}
+        <div style={{ position: "absolute", bottom: "30%", width: 40, height: 120, background: "linear-gradient(to top, rgba(255,100,0,0.9), rgba(255,200,50,0.6))", borderRadius: "4px 4px 0 0", transformOrigin: "bottom", animation: "mushroom-stem 1.8s ease-out 0.3s forwards", transform: "scaleY(0)", pointerEvents: "none" }} />
+
+        {/* Mushroom cap */}
+        <div style={{ position: "absolute", bottom: "calc(30% + 110px)", width: 140, height: 80, background: "radial-gradient(ellipse, rgba(255,180,0,0.95) 0%, rgba(255,80,0,0.8) 60%, transparent 100%)", borderRadius: "50% 50% 20% 20%", animation: "mushroom-cap 1.8s ease-out 0.3s forwards", transform: "scale(0)", pointerEvents: "none" }} />
+      </>}
+
+      {phase === "settle" && <>
+        {/* Confetti */}
+        {[...Array(30)].map((_, i) => {
+          const colors = ["#ffdd00","#1E90FF","#4ade80","#f87171","#fff","#fb923c"];
+          return (
+            <div key={i} style={{
+              position: "absolute",
+              top: `-${Math.random() * 20}px`,
+              left: `${Math.random() * 100}%`,
+              width: `${4 + Math.random() * 8}px`,
+              height: `${8 + Math.random() * 12}px`,
+              background: colors[i % colors.length],
+              borderRadius: "2px",
+              animation: `confetti-fall ${1.5 + Math.random() * 2}s ease-in ${Math.random() * 0.8}s forwards`,
+              pointerEvents: "none"
+            }} />
+          );
+        })}
+
+        {/* Win cards */}
+        <div style={{ animation: "celebration-text 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards", textAlign: "center", padding: "0 24px", maxWidth: 420, width: "100%" }}>
+          <div style={{ fontSize: 64, marginBottom: 8, filter: "drop-shadow(0 0 20px rgba(255,220,0,0.8))" }}>💥</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: "#ffdd00", letterSpacing: -1, textShadow: "0 0 30px rgba(255,220,0,0.6)", marginBottom: 6 }}>
+            {wins.length === 1 ? "WINNER!" : `${wins.length} WINNERS!`}
           </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 20 }}>Group play{wins.length > 1 ? "s" : ""} graded</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {wins.map((w, i) => (
+              <div key={w.key} style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.5)", borderRadius: 14, padding: "14px 20px", animation: `settle-in 0.4s ease ${i * 0.1}s both`, boxShadow: "0 0 20px rgba(74,222,128,0.2)" }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#4ade80" }}>✓ {w.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 24, fontSize: 12, color: "rgba(255,255,255,0.2)" }}>Tap anywhere to continue</div>
         </div>
-      )}
+      </>}
     </div>
   );
 }
@@ -1330,6 +1028,16 @@ function PlayerModal({ player, allPicks, games, onClose }) {
 // ─── CELEBRATION CSS (appended to main CSS string) ──
 const CELEBRATION_CSS = `
   @keyframes cel-fadein { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes shockwave { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(8); opacity: 0; } }
+  @keyframes shockwave2 { 0% { transform: scale(0); opacity: 0.7; } 100% { transform: scale(12); opacity: 0; } }
+  @keyframes fireball { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 40% { transform: scale(1.4) rotate(15deg); opacity: 1; } 100% { transform: scale(3) rotate(30deg); opacity: 0; } }
+  @keyframes debris { 0% { transform: translate(0,0) rotate(0deg) scale(1); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0); opacity: 0; } }
+  @keyframes mushroom-stem { 0% { transform: scaleY(0); opacity: 1; } 60% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+  @keyframes mushroom-cap { 0% { transform: scale(0) translateY(0); opacity: 1; } 50% { transform: scale(1) translateY(-20px); opacity: 1; } 100% { transform: scale(1.3) translateY(-40px); opacity: 0; } }
+  @keyframes celebration-text { 0% { transform: scale(0) rotate(-10deg); opacity: 0; } 50% { transform: scale(1.15) rotate(2deg); opacity: 1; } 70% { transform: scale(0.95) rotate(-1deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+  @keyframes flash { 0% { opacity: 0; } 10% { opacity: 0.9; } 30% { opacity: 0.4; } 50% { opacity: 0.7; } 70% { opacity: 0.2; } 100% { opacity: 0; } }
+  @keyframes confetti-fall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0.3; } }
+  @keyframes settle-in { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
   @keyframes cel-settle { 0% { opacity: 0; transform: translateY(32px) scale(0.92); } 60% { opacity: 1; transform: translateY(-4px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
   @keyframes cel-card { 0% { opacity: 0; transform: translateY(24px); } 100% { opacity: 1; transform: translateY(0); } }
   @keyframes cel-pulse { 0%,100% { box-shadow: 0 0 30px rgba(74,222,128,0.3); } 50% { box-shadow: 0 0 60px rgba(74,222,128,0.6), 0 0 100px rgba(74,222,128,0.2); } }
@@ -1843,7 +1551,7 @@ export default function App() {
   // Auto-advance celebration - missile sequence takes ~3.2s before settle
   useEffect(() => {
     if (showCelebration && celebrationPhase === "explode") {
-      const t = setTimeout(() => setCelebrationPhase("settle"), 5500);
+      const t = setTimeout(() => setCelebrationPhase("settle"), 1800);
       return () => clearTimeout(t);
     }
   }, [showCelebration, celebrationPhase]);
