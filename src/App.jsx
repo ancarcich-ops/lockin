@@ -578,88 +578,496 @@ function LossCelebration({ losses, onDismiss }) {
 }
 
 function WinCelebration({ wins, phase, onDismiss }) {
+  const canvasRef = useRef(null);
+  const animRef = useRef(null);
+  const timersRef = useRef([]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    const tgtX = W * 0.68, tgtY = H * 0.26;
+    const msX0 = W * 0.09, msY0 = H * 0.84;
+    const nukeGroundX = W * 0.5;
+    const nukeGroundY = H + 20;
+
+    let animPhase = 'hunt';
+    let rX = tgtX + W*0.14, rY = tgtY + H*0.11, rSize = 58, lockProgress = 0;
+    let lockedAt = 0, fireAt = 0, impactAt = 0;
+    let trail = [], particles = [], rings = [];
+    let shakeAmt = 0, flashAlpha = 0, flashColor = [255,255,255];
+    let impactFired = false;
+    let nukeStart = 0, nukeActive = false, nukeAlpha = 1, nukeFadingOut = false;
+    let nukeShockwaves = [], nukeDebris = [];
+    let whiteoutAlpha = 0, whiteoutPhase = 'none';
+    let overlayAlpha = 0, doSettle = false;
+
+    function T(fn, ms) { timersRef.current.push(setTimeout(fn, ms)); }
+    function lerp(a,b,t){return a+(b-a)*t}
+    function ease(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2}
+    function easeOut(t){return 1-Math.pow(1-t,3)}
+    function triggerFlash(r,g,b,a){flashAlpha=a;flashColor=[r,g,b];}
+    function triggerShake(a){shakeAmt=Math.max(shakeAmt,a);}
+
+    function spawnConfettiRain() {
+    const COLORS = ["#facc15","#fb923c","#f87171","#ffffff","#fde68a","#4ade80","#60a5fa","#fcd34d","#a78bfa"];
+    for (let i = 0; i < 220; i++) {
+      particles.push({
+        x: Math.random() * W,         // spread across full width
+        y: -20 - Math.random() * 200, // start above screen at staggered heights
+        vx: (Math.random()-0.5) * 2,  // gentle sideways drift
+        vy: 2 + Math.random() * 5,    // falling downward
+        size:3+Math.random()*6, color:COLORS[Math.floor(Math.random()*COLORS.length)],
+        alpha:1, decay:0.004+Math.random()*0.006, gravity:0.04+Math.random()*0.06,
+        rotSpeed:(Math.random()-0.5)*0.2, rotation:Math.random()*Math.PI*2,
+        isRect:Math.random()>0.3, w:4+Math.random()*10, h:8+Math.random()*16, trail:[],
+      });
+    }
+  }
+
+    function spawnExplosion(x, y) {
+    const COLORS = ["#facc15","#fb923c","#f87171","#ffffff","#fde68a","#ff6600","#fcd34d"];
+    for (let i = 0; i < 200; i++) {
+      const ang = Math.random()*Math.PI*2, spd = 6+Math.random()*22;
+      particles.push({
+        x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-Math.random()*8,
+        size:2+Math.random()*7, color:COLORS[Math.floor(Math.random()*COLORS.length)],
+        alpha:1, decay:0.008+Math.random()*0.012, gravity:0.22+Math.random()*0.15,
+        rotSpeed:(Math.random()-0.5)*0.35, rotation:Math.random()*Math.PI*2,
+        isRect:Math.random()>0.38, w:3+Math.random()*10, h:6+Math.random()*16, trail:[],
+      });
+    }
+    const maxR = Math.max(W,H)*1.1;
+    rings = [
+      {x,y,r:0,maxR:maxR*0.9,alpha:1.0,color:[255,220,60],lw:5,spd:28,delay:0,started:false,startT:null},
+      {x,y,r:0,maxR:maxR*0.75,alpha:0.8,color:[255,140,30],lw:10,spd:20,delay:60,started:false,startT:null},
+      {x,y,r:0,maxR:maxR*0.6,alpha:0.6,color:[255,80,0],lw:7,spd:24,delay:100,started:false,startT:null},
+    ];
+  }
+
+    function spawnNuke() {
+    nukeActive = true;
+    nukeStart = performance.now();
+    whiteoutPhase = 'rising';
+    whiteoutAlpha = 0;
+
+    // Shockwaves that expand from bottom center outward
+    nukeShockwaves = [
+      {r:0, maxR:W*1.8, spd:26, alpha:1.0, lw:8,  color:[255,240,180]},
+      {r:0, maxR:W*1.4, spd:18, alpha:0.8, lw:14, color:[255,180,60]},
+      {r:0, maxR:W*1.0, spd:12, alpha:0.6, lw:10, color:[255,100,10]},
+    ];
+
+    // Debris rains upward from ground
+    for (let i = 0; i < 100; i++) {
+      const ang = -Math.PI*0.1 - Math.random()*Math.PI*0.8; // mostly upward
+      const spd = 5+Math.random()*15;
+      nukeDebris.push({
+        x: nukeGroundX + (Math.random()-0.5)*W*0.3,
+        y: H - 10,
+        vx: Math.cos(ang)*spd,
+        vy: Math.sin(ang)*spd,
+        size: 2+Math.random()*6,
+        alpha: 1,
+        color: Math.random()>0.5?'#fb923c':Math.random()>0.5?'#facc15':'#fff',
+        rot: Math.random()*Math.PI*2,
+        rotSpd: (Math.random()-0.5)*0.4,
+        life: 0.6+Math.random()*0.5,
+      });
+    }
+  }
+
+    function drawMissile(cx,cy,angleDeg){
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(angleDeg*Math.PI/180);
+    const s=1.1;
+    ctx.fillStyle="#c8d0d8";ctx.beginPath();ctx.moveTo(0,-20*s);ctx.lineTo(7*s,-7*s);ctx.lineTo(7*s,12*s);ctx.lineTo(-7*s,12*s);ctx.lineTo(-7*s,-7*s);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#e8edf2";ctx.beginPath();ctx.moveTo(0,-20*s);ctx.lineTo(7*s,-7*s);ctx.lineTo(-7*s,-7*s);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#a0a8b4";
+    ctx.beginPath();ctx.moveTo(7*s,5*s);ctx.lineTo(16*s,16*s);ctx.lineTo(7*s,12*s);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(-7*s,5*s);ctx.lineTo(-16*s,16*s);ctx.lineTo(-7*s,12*s);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#fb923c";ctx.beginPath();ctx.ellipse(0,14*s,5*s,5*s,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#facc15";ctx.beginPath();ctx.ellipse(0,17*s,3*s,6*s,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.8)";ctx.beginPath();ctx.ellipse(0,19*s,1.5*s,3.5*s,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#60a5fa";ctx.beginPath();ctx.arc(0,-9*s,3*s,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+
+    function drawReticle(x,y,sz,locked,lp){
+    const col=locked?"#f87171":lp>0.5?"#facc15":"#4ade80";
+    ctx.save();ctx.globalAlpha=0.95;
+    ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);ctx.setLineDash([8,5]);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+    const br=sz*0.65,blen=sz*0.38,bOff=sz*0.28*(1-lp);
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy])=>{
+      const bx=x+sx*(br+bOff),by=y+sy*(br+bOff);
+      ctx.beginPath();ctx.moveTo(bx+sx*blen,by);ctx.lineTo(bx,by);ctx.lineTo(bx,by+sy*blen);ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.stroke();
+    });
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;
+    [[x,y-10,x,y-sz*0.72],[x,y+10,x,y+sz*0.72],[x-10,y,x-sz*0.72,y],[x+10,y,x+sz*0.72,y]].forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();});
+    ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+    if(lp>0){ctx.beginPath();ctx.arc(x,y,sz+8,-Math.PI/2,-Math.PI/2+lp*Math.PI*2);ctx.strokeStyle="#f87171";ctx.lineWidth=4;ctx.stroke();}
+    ctx.save();ctx.beginPath();ctx.arc(x,y,sz*0.52,0,Math.PI*2);ctx.clip();
+    ctx.fillStyle="#239f40";ctx.fillRect(x-sz*0.52,y-sz*0.52,sz*1.04,sz*0.35);
+    ctx.fillStyle="#fff";ctx.fillRect(x-sz*0.52,y-sz*0.17,sz*1.04,sz*0.34);
+    ctx.fillStyle="#da0000";ctx.fillRect(x-sz*0.52,y+sz*0.17,sz*1.04,sz*0.35);
+    ctx.restore();
+    ctx.beginPath();ctx.arc(x,y,sz*0.52,0,Math.PI*2);ctx.strokeStyle="rgba(255,255,255,0.25)";ctx.lineWidth=1;ctx.stroke();
+    if(locked){ctx.font="bold 11px 'Courier New'";ctx.fillStyle="#f87171";ctx.textAlign="center";ctx.globalAlpha=0.5+0.5*Math.sin(Date.now()*0.025);ctx.fillText("LOCKED",x,y+sz+20);}
+    ctx.restore();
+  }
+
+    function drawNuke(nt) {
+    if (nt <= 0) return;
+    const gx = nukeGroundX;
+    const gy = nukeGroundY; // below screen
+    const maxStemH = H * 1.6; // stem goes way off top
+
+    // How far the stem has risen (0 = at ground, 1 = full height)
+    const riseT = easeOut(Math.min(nt * 1.4, 1));
+    const sH = lerp(0, maxStemH, riseT);
+    const sW = lerp(0, 30, easeOut(Math.min(nt*0.7, 1)));
+    const sBaseW = lerp(0, 80, easeOut(Math.min(nt*0.85, 1)));
+    const stemTop = gy - sH; // this goes negative (above screen) = good
+
+    // Stem glow — massive ambient light from below
+    const ambientRadius = lerp(0, W*1.2, easeOut(Math.min(nt*1.2,1)));
+    const ambGrad = ctx.createRadialGradient(gx, H, 0, gx, H, ambientRadius);
+    ambGrad.addColorStop(0, `rgba(255,200,80,${Math.min(nt*2,0.6)})`);
+    ambGrad.addColorStop(0.3, `rgba(255,120,20,${Math.min(nt*2,0.4)})`);
+    ambGrad.addColorStop(0.6, `rgba(200,50,0,${Math.min(nt*1.5,0.2)})`);
+    ambGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ambGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Stem body — draw even if top is above canvas
+    const drawStemTop = Math.max(stemTop, -50);
+    const drawStemH = gy - drawStemTop;
+    if (drawStemH > 0 && sW > 0) {
+      const stemGrad = ctx.createLinearGradient(gx, gy, gx, drawStemTop);
+      stemGrad.addColorStop(0, `rgba(255,200,60,${riseT*0.95})`);
+      stemGrad.addColorStop(0.25, `rgba(255,140,25,${riseT*0.88})`);
+      stemGrad.addColorStop(0.6, `rgba(200,80,10,${riseT*0.78})`);
+      stemGrad.addColorStop(1, `rgba(140,45,5,${riseT*0.65})`);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(gx - sBaseW/2, gy);
+      ctx.bezierCurveTo(gx - sBaseW/2, gy - drawStemH*0.2, gx - sW/2, drawStemTop + drawStemH*0.15, gx - sW/2, drawStemTop);
+      ctx.lineTo(gx + sW/2, drawStemTop);
+      ctx.bezierCurveTo(gx + sW/2, drawStemTop + drawStemH*0.15, gx + sBaseW/2, gy - drawStemH*0.2, gx + sBaseW/2, gy);
+      ctx.closePath();
+      ctx.fillStyle = stemGrad;
+      ctx.fill();
+      // Inner hot glow streak
+      const ig = ctx.createLinearGradient(gx-sW*0.3, 0, gx+sW*0.3, 0);
+      ig.addColorStop(0, 'rgba(255,230,100,0)');
+      ig.addColorStop(0.5, `rgba(255,245,160,${riseT*0.6})`);
+      ig.addColorStop(1, 'rgba(255,230,100,0)');
+      ctx.fillStyle = ig;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Cap — appears when stem is tall enough, rises with it
+    const capAppear = Math.max(0, (nt - 0.18) / 0.82);
+    if (capAppear > 0) {
+      const capT = easeOut(Math.min(capAppear, 1));
+      // Cap center tracks stem top but clamped — we want it visible on screen
+      const capCY = Math.max(stemTop + 60, H * 0.05);
+      const capCX = gx;
+      const cR = lerp(0, 130, capT); // huge cap
+      const cRv = lerp(0, 80, capT);
+
+      // Outer atmospheric glow around cap
+      ctx.save();
+      ctx.scale(1, cRv/cR);
+      const atmG = ctx.createRadialGradient(capCX, capCY*(cR/cRv), 0, capCX, capCY*(cR/cRv), cR*1.6);
+      atmG.addColorStop(0, `rgba(255,160,30,${capT*0.55})`);
+      atmG.addColorStop(0.45, `rgba(200,70,8,${capT*0.32})`);
+      atmG.addColorStop(0.8, `rgba(120,25,0,${capT*0.15})`);
+      atmG.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = atmG;
+      ctx.beginPath();ctx.arc(capCX, capCY*(cR/cRv), cR*1.6, 0, Math.PI*2);ctx.fill();
+      ctx.restore();
+
+      // Puffball cap
+      const puffs = [
+        {ox:0, oy:0, r:cR},
+        {ox:-cR*0.56, oy:cR*0.25, r:cR*0.72},
+        {ox:cR*0.56, oy:cR*0.25, r:cR*0.72},
+        {ox:-cR*0.82, oy:cR*0.56, r:cR*0.54},
+        {ox:cR*0.82, oy:cR*0.56, r:cR*0.54},
+        {ox:0, oy:cR*0.46, r:cR*0.64},
+        {ox:-cR*0.35, oy:-cR*0.3, r:cR*0.60},
+        {ox:cR*0.35, oy:-cR*0.3, r:cR*0.60},
+        {ox:-cR*0.65, oy:-cR*0.1, r:cR*0.48},
+        {ox:cR*0.65, oy:-cR*0.1, r:cR*0.48},
+      ];
+      ctx.save();
+      ctx.scale(1, cRv/cR);
+      const yS = capCY*(cR/cRv);
+      puffs.forEach(p => {
+        const pg = ctx.createRadialGradient(capCX+p.ox, yS+p.oy, 0, capCX+p.ox, yS+p.oy, p.r);
+        pg.addColorStop(0, `rgba(255,185,65,${capT*0.96})`);
+        pg.addColorStop(0.3, `rgba(220,105,22,${capT*0.88})`);
+        pg.addColorStop(0.62, `rgba(160,58,8,${capT*0.76})`);
+        pg.addColorStop(0.85, `rgba(90,22,2,${capT*0.5})`);
+        pg.addColorStop(1, 'rgba(40,8,0,0)');
+        ctx.fillStyle = pg;
+        ctx.beginPath();ctx.arc(capCX+p.ox, yS+p.oy, p.r, 0, Math.PI*2);ctx.fill();
+      });
+      // Blazing hot white core
+      const hc = ctx.createRadialGradient(capCX, yS-cR*0.08, 0, capCX, yS-cR*0.08, cR*0.5);
+      hc.addColorStop(0, `rgba(255,255,230,${capT*0.96})`);
+      hc.addColorStop(0.35, `rgba(255,225,100,${capT*0.78})`);
+      hc.addColorStop(0.7, `rgba(255,145,20,${capT*0.4})`);
+      hc.addColorStop(1, 'rgba(255,100,0,0)');
+      ctx.fillStyle = hc;
+      ctx.beginPath();ctx.arc(capCX, yS-cR*0.08, cR*0.5, 0, Math.PI*2);ctx.fill();
+      ctx.restore();
+
+      // Skirt ring
+      if (capAppear > 0.35) {
+        const skirtT = easeOut(Math.min((capAppear-0.35)/0.4, 1));
+        ctx.save();
+        ctx.globalAlpha = capT*0.7*skirtT;
+        const skR = cR*1.12*skirtT;
+        const skG = ctx.createRadialGradient(capCX, capCY+cRv*0.84, 0, capCX, capCY+cRv*0.84, skR);
+        skG.addColorStop(0, 'rgba(255,150,30,0.7)');
+        skG.addColorStop(0.55, 'rgba(200,70,8,0.35)');
+        skG.addColorStop(1, 'rgba(100,20,0,0)');
+        ctx.fillStyle = skG;
+        ctx.scale(1, 22/Math.max(skR,1));
+        ctx.beginPath();ctx.arc(capCX, (capCY+cRv*0.84)*(Math.max(skR,1)/22), skR, 0, Math.PI*2);ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+    function drawWhiteout() {
+    if (whiteoutPhase === 'none' || whiteoutAlpha <= 0) return;
+    // Full screen blinding white with warm tint at edges
+    ctx.save();
+    // White core
+    ctx.fillStyle = `rgba(255,255,240,${whiteoutAlpha})`;
+    ctx.fillRect(0, 0, W, H);
+    // Warm orange vignette at edges during peak
+    if (whiteoutAlpha > 0.5) {
+      const vg = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.9);
+      vg.addColorStop(0, 'rgba(255,255,255,0)');
+      vg.addColorStop(0.7, `rgba(255,180,30,${(whiteoutAlpha-0.5)*0.6})`);
+      vg.addColorStop(1, `rgba(255,120,0,${(whiteoutAlpha-0.5)*0.9})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+    const startTime = performance.now();
+    let lastTime = startTime;
+
+    function tick(now) {
+      const dt = Math.min((now-lastTime)/1000, 0.05);
+      lastTime = now;
+      const el = now - startTime;
+
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+
+      const sx=shakeAmt>0.3?(Math.random()-0.5)*shakeAmt:0;
+      const sy=shakeAmt>0.3?(Math.random()-0.5)*shakeAmt:0;
+      shakeAmt*=0.8;
+      ctx.save();ctx.translate(sx,sy);
+
+      if(flashAlpha>0.01){
+        const[fr,fg,fb]=flashColor;
+        ctx.fillStyle=`rgba(${fr},${fg},${fb},${flashAlpha})`;
+        ctx.fillRect(-50,-50,W+100,H+100);
+        flashAlpha*=0.72;
+      }
+
+      rings.forEach(ring=>{
+        if(ring.delay&&el<ring.delay+1000){const re=el-1000;if(re<ring.delay)return;}
+        if(!ring.started){ring.started=true;}
+        ring.r=Math.min(ring.r+ring.spd,ring.maxR);
+        const a=ring.alpha*(1-ring.r/ring.maxR);
+        if(a>0.008){
+          ctx.beginPath();ctx.arc(ring.x,ring.y,ring.r,0,Math.PI*2);
+          ctx.strokeStyle=`rgba(${ring.color[0]},${ring.color[1]},${ring.color[2]},${a})`;
+          ctx.lineWidth=ring.lw;ctx.stroke();
+          ctx.lineWidth=ring.lw*3;
+          ctx.strokeStyle=`rgba(${ring.color[0]},${ring.color[1]},${ring.color[2]},${a*0.3})`;
+          ctx.stroke();
+        }
+      });
+
+      particles.forEach(p=>{
+        if(p.alpha<=0.015)return;
+        p.trail.push({x:p.x,y:p.y});
+        if(p.trail.length>5)p.trail.shift();
+        for(let ti=1;ti<p.trail.length;ti++){
+          const pr2=p.trail[ti-1],qr=p.trail[ti],prog=ti/p.trail.length;
+          ctx.beginPath();ctx.moveTo(pr2.x,pr2.y);ctx.lineTo(qr.x,qr.y);
+          ctx.strokeStyle=p.color;ctx.globalAlpha=p.alpha*prog*0.5;ctx.lineWidth=p.size*0.5*prog;ctx.stroke();
+        }
+        ctx.globalAlpha=p.alpha;
+        p.x+=p.vx;p.y+=p.vy;p.vy+=p.gravity;p.vx*=0.98;
+        p.alpha-=p.decay;p.rotation+=p.rotSpeed;
+        ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rotation);
+        if(p.isRect){ctx.fillStyle=p.color;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);}
+        else{ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(0,0,p.size,0,Math.PI*2);ctx.fill();}
+        ctx.restore();ctx.globalAlpha=1;
+      });
+
+      if(animPhase==='hunt'){
+        const huntT=Math.min(el/1000,1),wobble=1-huntT;
+        rX=lerp(rX,tgtX+Math.sin(el*0.003)*40*wobble,0.035+huntT*0.04);
+        rY=lerp(rY,tgtY+Math.cos(el*0.0025)*30*wobble,0.035+huntT*0.04);
+        rSize=lerp(rSize,36,0.025);
+        drawReticle(rX,rY,rSize,false,0);
+        if(huntT>=1){animPhase='locking';lockedAt=now;}
+      }else if(animPhase==='locking'){
+        const lt=Math.min((now-lockedAt)/700,1);lockProgress=lt;
+        rX=lerp(rX,tgtX,0.10+lt*0.12);rY=lerp(rY,tgtY,0.10+lt*0.12);rSize=lerp(rSize,32,0.05);
+        drawReticle(rX,rY,rSize,lt>0.95,lt);
+        if(lt>0.45&&lt<0.5){triggerFlash(248,113,113,0.4);triggerShake(8);}
+        if(lt>0.78&&lt<0.83){triggerFlash(248,113,113,0.6);triggerShake(10);}
+        if(lt>=1){animPhase='locked';fireAt=now+500;triggerFlash(255,80,80,0.7);triggerShake(14);}
+      }else if(animPhase==='locked'){
+        drawReticle(tgtX,tgtY,32,true,1);
+        if(now>=fireAt)animPhase='fire';
+      }else if(animPhase==='fire'){
+        drawReticle(tgtX,tgtY,32,true,1);
+        const ft=Math.min((now-fireAt)/700,1),et=ease(ft);
+        const cpX=tgtX-W*0.18,cpY=Math.min(msY0,tgtY)-H*0.35;
+        const mx=(1-et)*(1-et)*msX0+2*(1-et)*et*cpX+et*et*tgtX;
+        const my=(1-et)*(1-et)*msY0+2*(1-et)*et*cpY+et*et*tgtY;
+        const ft2=Math.min(ft+0.015,1),et2=ease(ft2);
+        const nx=(1-et2)*(1-et2)*msX0+2*(1-et2)*et2*cpX+et2*et2*tgtX;
+        const ny=(1-et2)*(1-et2)*msY0+2*(1-et2)*et2*cpY+et2*et2*tgtY;
+        const angle=Math.atan2(ny-my,nx-mx)*(180/Math.PI)+90;
+        trail.push({x:mx,y:my});if(trail.length>55)trail.shift();
+        for(let ti=1;ti<trail.length;ti++){
+          const p=trail[ti-1],q=trail[ti],prog=ti/trail.length;
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=`rgba(250,180,30,${prog*0.9})`;ctx.lineWidth=1.5+prog*4.5;ctx.stroke();
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=`rgba(255,255,200,${prog*0.55})`;ctx.lineWidth=prog*2;ctx.stroke();
+        }
+        drawMissile(mx,my,angle);
+        if(ft>=1&&!impactFired){
+          impactFired=true;animPhase='exploding';impactAt=now;
+          spawnExplosion(tgtX,tgtY);
+          triggerFlash(255,255,220,1.0);triggerShake(28);
+          T(()=>{triggerFlash(255,180,30,0.7);triggerShake(20);},100);
+          T(()=>{triggerFlash(255,100,0,0.5);triggerShake(14);},220);
+          T(()=>{ spawnNuke(); triggerShake(30); },350);
+          T(()=>{ whiteoutPhase='peak'; },1800);
+          T(()=>{ whiteoutPhase='fading'; },2600);
+          T(()=>{ nukeFadingOut=true; },3200);
+          T(()=>{ spawnConfettiRain(); },4400);
+          T(()=>{ overlayAlpha=0; doSettle=true; },5200);
+        }
+      }else if(animPhase==='exploding'){
+        const fbt=Math.min((now-impactAt)/800,1);
+        if(fbt<1){
+          const fbSize=(1-fbt)*Math.max(W,H)*0.85;
+          const grad=ctx.createRadialGradient(tgtX,tgtY,0,tgtX,tgtY,fbSize);
+          grad.addColorStop(0,`rgba(255,255,255,${(1-fbt)*0.9})`);
+          grad.addColorStop(0.15,`rgba(255,240,100,${(1-fbt)*0.8})`);
+          grad.addColorStop(0.35,`rgba(255,140,20,${(1-fbt)*0.7})`);
+          grad.addColorStop(0.6,`rgba(220,60,0,${(1-fbt)*0.5})`);
+          grad.addColorStop(1,'transparent');
+          ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+        }
+      }
+
+      if(nukeActive){
+        if(nukeFadingOut) nukeAlpha=Math.max(0,nukeAlpha-0.018);
+        if(nukeAlpha<=0){nukeActive=false;}
+        const nt=(now-nukeStart)/2800;
+        ctx.save();ctx.globalAlpha=nukeAlpha;
+        nukeShockwaves.forEach(sw=>{
+          sw.r+=sw.spd;if(sw.r>sw.maxR)return;
+          const a=sw.alpha*(1-sw.r/sw.maxR);if(a<0.005)return;
+          ctx.save();ctx.globalAlpha=nukeAlpha*a;
+          ctx.beginPath();ctx.arc(nukeGroundX,nukeGroundY,sw.r,0,Math.PI*2);
+          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a})`;
+          ctx.lineWidth=sw.lw*(1-sw.r/sw.maxR)+1;ctx.stroke();
+          ctx.lineWidth=(sw.lw*(1-sw.r/sw.maxR)+1)*4;
+          ctx.strokeStyle=`rgba(${sw.color[0]},${sw.color[1]},${sw.color[2]},${a*0.2})`;
+          ctx.stroke();ctx.restore();
+        });
+        nukeDebris.forEach(p=>{
+          p.x+=p.vx*dt*60;p.y+=p.vy*dt*60;
+          p.vy+=0.08*dt*60;p.vx*=0.98;
+          p.alpha-=(dt/p.life)*0.7;p.rot+=p.rotSpd;
+          if(p.alpha<=0)return;
+          ctx.save();ctx.globalAlpha=Math.max(0,p.alpha)*nukeAlpha;
+          ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+          ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
+          ctx.restore();
+        });
+        drawNuke(nt);
+        ctx.restore();
+        if(whiteoutPhase==='rising') whiteoutAlpha=Math.min(whiteoutAlpha+dt*1.2,0.95);
+        else if(whiteoutPhase==='peak') whiteoutAlpha=0.92+Math.sin(now*0.004)*0.06;
+        else if(whiteoutPhase==='fading'){whiteoutAlpha=Math.max(0,whiteoutAlpha-dt*0.55);if(whiteoutAlpha<=0)whiteoutPhase='none';}
+        drawWhiteout();
+      }
+
+      if(doSettle&&whiteoutPhase==='none'){
+        if(overlayAlpha<0.88) overlayAlpha=Math.min(overlayAlpha+0.025,0.88);
+        ctx.fillStyle=`rgba(0,0,0,${overlayAlpha})`;
+        ctx.fillRect(0,0,W,H);
+      }
+
+      ctx.restore();
+      animRef.current=requestAnimationFrame(tick);
+    }
+
+    animRef.current=requestAnimationFrame(tick);
+    return ()=>{
+      if(animRef.current) cancelAnimationFrame(animRef.current);
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current=[];
+    };
+  }, []);
+
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: phase === "explode" ? "rgba(0,0,0,0.95)" : "rgba(0,0,0,0.85)", cursor: "pointer" }} onClick={onDismiss}>
-
-      {phase === "explode" && <>
-        {/* Flash */}
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #fff 0%, #ffdd00 30%, transparent 70%)", animation: "flash 0.8s ease-out forwards", pointerEvents: "none" }} />
-
-        {/* Shockwaves */}
-        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "4px solid rgba(255,180,0,0.8)", animation: "shockwave 1.2s ease-out 0.1s forwards", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "8px solid rgba(255,100,0,0.6)", animation: "shockwave2 1.6s ease-out 0.2s forwards", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.5)", animation: "shockwave 2s ease-out 0.4s forwards", pointerEvents: "none" }} />
-
-        {/* Fireball core */}
-        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, #fff 0%, #ffdd00 25%, #ff6600 55%, #cc2200 80%, transparent 100%)", animation: "fireball 1.4s ease-out forwards", boxShadow: "0 0 60px 30px rgba(255,100,0,0.6), 0 0 120px 60px rgba(255,50,0,0.3)", pointerEvents: "none" }} />
-
-        {/* Debris particles */}
-        {[...Array(18)].map((_, i) => {
-          const angle = (i / 18) * 360;
-          const dist = 120 + Math.random() * 180;
-          const dx = Math.cos(angle * Math.PI / 180) * dist;
-          const dy = Math.sin(angle * Math.PI / 180) * dist;
-          const size = 4 + Math.random() * 8;
-          const colors = ["#ffdd00","#ff6600","#ff3300","#ffaa00","#ffffff"];
-          const color = colors[i % colors.length];
-          const delay = Math.random() * 0.3;
-          return (
-            <div key={i} style={{
-              position: "absolute", width: size, height: size,
-              borderRadius: Math.random() > 0.5 ? "50%" : "2px",
-              background: color,
-              "--dx": `${dx}px`, "--dy": `${dy}px`,
-              "--rot": `${Math.random() * 720 - 360}deg`,
-              animation: `debris 1.2s ease-out ${delay}s forwards`,
-              boxShadow: `0 0 ${size}px ${color}`,
-              pointerEvents: "none"
-            }} />
-          );
-        })}
-
-        {/* Mushroom stem */}
-        <div style={{ position: "absolute", bottom: "30%", width: 40, height: 120, background: "linear-gradient(to top, rgba(255,100,0,0.9), rgba(255,200,50,0.6))", borderRadius: "4px 4px 0 0", transformOrigin: "bottom", animation: "mushroom-stem 1.8s ease-out 0.3s forwards", transform: "scaleY(0)", pointerEvents: "none" }} />
-
-        {/* Mushroom cap */}
-        <div style={{ position: "absolute", bottom: "calc(30% + 110px)", width: 140, height: 80, background: "radial-gradient(ellipse, rgba(255,180,0,0.95) 0%, rgba(255,80,0,0.8) 60%, transparent 100%)", borderRadius: "50% 50% 20% 20%", animation: "mushroom-cap 1.8s ease-out 0.3s forwards", transform: "scale(0)", pointerEvents: "none" }} />
-      </>}
-
-      {phase === "settle" && <>
-        {/* Confetti */}
-        {[...Array(30)].map((_, i) => {
-          const colors = ["#ffdd00","#1E90FF","#4ade80","#f87171","#fff","#fb923c"];
-          return (
-            <div key={i} style={{
-              position: "absolute",
-              top: `-${Math.random() * 20}px`,
-              left: `${Math.random() * 100}%`,
-              width: `${4 + Math.random() * 8}px`,
-              height: `${8 + Math.random() * 12}px`,
-              background: colors[i % colors.length],
-              borderRadius: "2px",
-              animation: `confetti-fall ${1.5 + Math.random() * 2}s ease-in ${Math.random() * 0.8}s forwards`,
-              pointerEvents: "none"
-            }} />
-          );
-        })}
-
-        {/* Win cards */}
-        <div style={{ animation: "celebration-text 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards", textAlign: "center", padding: "0 24px", maxWidth: 420, width: "100%" }}>
-          <div style={{ fontSize: 64, marginBottom: 8, filter: "drop-shadow(0 0 20px rgba(255,220,0,0.8))" }}>💥</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: "#ffdd00", letterSpacing: -1, textShadow: "0 0 30px rgba(255,220,0,0.6)", marginBottom: 6 }}>
-            {wins.length === 1 ? "WINNER!" : `${wins.length} WINNERS!`}
+    <div style={{position:"fixed",inset:0,zIndex:1000,cursor:"pointer"}} onClick={onDismiss}>
+      <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} />
+      {phase==="settle" && (
+        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 24px"}}>
+          <div style={{textAlign:"center",maxWidth:400,width:"100%",animation:"cel-settle 0.6s cubic-bezier(0.34,1.4,0.64,1) forwards"}}>
+            <div style={{fontSize:72,lineHeight:1,marginBottom:12,filter:"drop-shadow(0 0 24px rgba(250,204,21,0.9))"}}>
+              {wins.length>1?"🏆":"✅"}
+            </div>
+            <div style={{fontSize:wins.length>1?28:36,fontWeight:800,color:"#facc15",letterSpacing:-1,marginBottom:4,textShadow:"0 0 40px rgba(250,204,21,0.5)"}}>
+              {wins.length===1?"CASH IT":`${wins.length}× WINNER`}
+            </div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.35)",marginBottom:28,letterSpacing:0.5}}>
+              GROUP PLAY{wins.length>1?"S":""} GRADED
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {wins.map((w,i)=>(
+                <div key={w.key} style={{background:"linear-gradient(135deg,rgba(74,222,128,0.18),rgba(74,222,128,0.08))",border:"1px solid rgba(74,222,128,0.45)",borderRadius:16,padding:"16px 22px",animation:`cel-card 0.45s cubic-bezier(0.34,1.2,0.64,1) ${0.1+i*0.12}s both`,boxShadow:"0 4px 24px rgba(74,222,128,0.15)",display:"flex",alignItems:"center",gap:14}}>
+                  <div style={{fontSize:22,flexShrink:0}}>💰</div>
+                  <div style={{textAlign:"left"}}>
+                    <div style={{fontSize:15,fontWeight:700,color:"#86efac",lineHeight:1.3}}>{w.label}</div>
+                    <div style={{fontSize:11,color:"rgba(134,239,172,0.5)",marginTop:3,letterSpacing:0.3}}>WINNER</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:28,fontSize:11,color:"rgba(255,255,255,0.18)",letterSpacing:1,textTransform:"uppercase"}}>
+              Tap to continue
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 20 }}>Group play{wins.length > 1 ? "s" : ""} graded</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {wins.map((w, i) => (
-              <div key={w.key} style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.5)", borderRadius: 14, padding: "14px 20px", animation: `settle-in 0.4s ease ${i * 0.1}s both`, boxShadow: "0 0 20px rgba(74,222,128,0.2)" }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#4ade80" }}>✓ {w.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 24, fontSize: 12, color: "rgba(255,255,255,0.2)" }}>Tap anywhere to continue</div>
         </div>
-      </>}
+      )}
     </div>
   );
 }
@@ -1551,7 +1959,7 @@ export default function App() {
   // Auto-advance celebration - missile sequence takes ~3.2s before settle
   useEffect(() => {
     if (showCelebration && celebrationPhase === "explode") {
-      const t = setTimeout(() => setCelebrationPhase("settle"), 1800);
+      const t = setTimeout(() => setCelebrationPhase("settle"), 5200);
       return () => clearTimeout(t);
     }
   }, [showCelebration, celebrationPhase]);
