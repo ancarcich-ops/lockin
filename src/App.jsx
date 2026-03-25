@@ -1729,11 +1729,11 @@ export default function App() {
     setOddsLoading(true); setOddsError(null);
     try {
       console.log("[LockIn] admin triggered odds refresh - hitting API");
-      const sports = ["basketball_ncaab"];
+      const sports = [{ key: "basketball_ncaab", label: "ncaab" }, { key: "baseball_mlb", label: "mlb" }];
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -1772,6 +1772,7 @@ export default function App() {
               away: awayML ? (awayML.price > 0 ? `+${awayML.price}` : `${awayML.price}`) : "N/A",
               home: homeML ? (homeML.price > 0 ? `+${homeML.price}` : `${homeML.price}`) : "N/A",
             },
+            sport: sport.label,
             h1: spreads_h1 || totals_h1 ? {
               spread: {
                 away: awayH1Spread ? (awayH1Spread.point > 0 ? `+${awayH1Spread.point}` : `${awayH1Spread.point}`) : null,
@@ -3014,12 +3015,15 @@ export default function App() {
                   {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>}
                 </div>}
 
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.4))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "#bae6fd", textTransform: "uppercase" }}>NCAAB</span>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{filteredGames.length} game{filteredGames.length!==1?"s":""}{search?" found":" today"}</span>
-                </div>
+                {/* NCAAB Section */}
+                {filteredGames.filter(g => !g.sport || g.sport === "ncaab").length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.4), rgba(14,165,233,0.4))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "#bae6fd", textTransform: "uppercase" }}>NCAAB</span>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{filteredGames.filter(g => !g.sport || g.sport === "ncaab").length} game{filteredGames.filter(g => !g.sport || g.sport === "ncaab").length!==1?"s":""}{search?" found":" today"}</span>
+                  </div>
+                )}
 
-                {filteredGames.map(game => {
+                {filteredGames.filter(g => !g.sport || g.sport === "ncaab").map(game => {
                   const isOpen = expandedGame === game.id;
                   const gamePicks = Object.keys(selectedPicks).filter(k => k.startsWith(game.id));
                   return (
@@ -3094,6 +3098,56 @@ export default function App() {
                     </div>
                   );
                 })}
+                {/* MLB Section */}
+                {filteredGames.filter(g => g.sport === "mlb").length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                      <span style={{ background: "linear-gradient(135deg, rgba(20,160,60,0.4), rgba(16,130,50,0.4))", border: "1px solid rgba(20,160,60,0.45)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "#86efac", textTransform: "uppercase" }}>MLB</span>
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{filteredGames.filter(g => g.sport === "mlb").length} game{filteredGames.filter(g => g.sport === "mlb").length!==1?"s":""}{search?" found":" today"}</span>
+                    </div>
+                    {filteredGames.filter(g => g.sport === "mlb").map(game => {
+                      const isOpen = expandedGame === game.id;
+                      const gamePicks = Object.keys(selectedPicks).filter(k => k.startsWith(game.id));
+                      return (
+                        <div key={game.id} className={isOpen?"glass-card-open":"glass-card"} style={{ borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s, background 0.2s" }}>
+                          <div className="game-row" onClick={() => setExpandedGame(isOpen ? null : game.id)} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isOpen?"1px solid rgba(255,255,255,0.06)":"none" }}>
+                            <div>
+                              <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{game.away} <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 300 }}>@</span> {game.home}</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{game.time}</div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              {gamePicks.length > 0 && <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.35), rgba(14,165,233,0.35))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd", fontWeight: 600 }}>{gamePicks.length} pick{gamePicks.length!==1?"s":""}</span>}
+                              <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 13, display: "inline-block", transform: isOpen?"rotate(180deg)":"rotate(0deg)", transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)" }}>▾</span>
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div style={{ padding: "16px 18px 18px" }} className="expand">
+                              {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
+                                <div key={catLabel} style={{ marginBottom: 14 }}>
+                                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>{catLabel}</div>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                    {types.map(bt => {
+                                      const v = BET_TYPES[bt](game);
+                                      const key = `${game.id}__${bt}`;
+                                      const picked = !!selectedPicks[key];
+                                      return (
+                                        <button key={bt} onClick={() => !hasSubmitted && togglePick(key, v.label)} style={{ flex: 1, minWidth: 100, padding: "10px 14px", background: picked?"linear-gradient(135deg,rgba(30,144,255,0.35),rgba(14,165,233,0.25))":"rgba(255,255,255,0.04)", border: picked?"1px solid rgba(30,144,255,0.6)":"1px solid rgba(255,255,255,0.08)", borderRadius: 10, cursor: hasSubmitted?"default":"pointer", transition: "all 0.15s", fontFamily: "Outfit, sans-serif" }}>
+                                          <div style={{ fontSize: 13, fontWeight: 700, color: picked?"#bae6fd":"#fff" }}>{v.line}</div>
+                                          <div style={{ fontSize: 10, color: picked?"rgba(186,230,253,0.6)":"rgba(255,255,255,0.3)", marginTop: 2 }}>{v.label}</div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div style={{ height: 16 }} />
                 }
               </>
