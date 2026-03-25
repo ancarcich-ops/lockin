@@ -3122,7 +3122,7 @@ export default function App() {
                           </div>
                           {isOpen && (
                             <div style={{ padding: "16px 18px 18px" }} className="expand">
-                              {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
+                              {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]],["Moneyline",["ml_away","ml_home"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
                                 <div key={catLabel} style={{ marginBottom: 14 }}>
                                   <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>{catLabel}</div>
                                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
