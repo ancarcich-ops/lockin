@@ -57,7 +57,7 @@ const TODAY_LABEL = new Date().toLocaleDateString("en-US", {
 // Use Eastern time for date so cache key is consistent all day in US
 const TODAY_DATE = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD in ET
 
-const ADMIN_PASSWORD = "football4";
+const ADMIN_PASSWORD = "a";
 
 
 // ─── WIN CELEBRATION ──────────────────────────────────────────────────────────
@@ -1531,6 +1531,7 @@ export default function App() {
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
   const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
+  const [activePicksDate, setActivePicksDate] = useState(TODAY_DATE); // tracks which date's picks are shown
 
   // Groups
   const [activeGroup, setActiveGroup]           = useState(null); // { id, name, invite_code, role }
@@ -1839,9 +1840,32 @@ export default function App() {
     if (!uname && !viewerMode) { setLoading(false); return; }
     setLoading(true);
     try {
-    let picksQuery = supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE);
+    let picksQuery = supabase.from("picks").select("username, selections, is_public, user_id, date").eq("date", TODAY_DATE);
     if (groupId) picksQuery = picksQuery.eq("group_id", groupId);
-    const { data: picksRows } = await picksQuery;
+    let { data: picksRows } = await picksQuery;
+    // If no picks today, check yesterday for ungraded plays
+    let picksDate = TODAY_DATE;
+    setActivePicksDate(TODAY_DATE);
+    if (!picksRows || picksRows.length === 0) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yDate = yesterday.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      let yQuery = supabase.from("picks").select("username, selections, is_public, user_id, date").eq("date", yDate);
+      if (groupId) yQuery = yQuery.eq("group_id", groupId);
+      const { data: yRows } = await yQuery;
+      if (yRows && yRows.length > 0) {
+        // Check if there are any ungraded results from yesterday
+        let yResultsQ = supabase.from("group_results").select("key, result").eq("date", yDate).not("result", "in", '("win","loss","push")');
+        if (groupId) yResultsQ = yResultsQ.eq("group_id", groupId);
+        const { data: yUngraded } = await yResultsQ;
+        // Also check if any picks exist that have no result at all (pending)
+        if (yUngraded && yUngraded.length > 0) {
+          picksRows = yRows;
+          picksDate = yDate;
+          setActivePicksDate(yDate);
+        }
+      }
+    }
 
     if (picksRows) {
       const built = {};
@@ -1860,7 +1884,7 @@ export default function App() {
     }
 
     // Load results for today
-    let resultsQuery = supabase.from("group_results").select("key, result").eq("date", TODAY_DATE);
+    let resultsQuery = supabase.from("group_results").select("key, result").eq("date", picksDate);
     if (groupId) resultsQuery = resultsQuery.eq("group_id", groupId);
     const { data: resultsRows } = await resultsQuery;
 
@@ -2116,10 +2140,27 @@ export default function App() {
   }
 
   // ── Picks ─────────────────────────────────────────────────────────────────
-  const filteredGames = games.filter(g =>
-    g.away.toLowerCase().includes(search.toLowerCase()) ||
-    g.home.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredGames = games.filter(g => {
+    // Hide games that started more than 15 minutes ago
+    const gameTimeStr = g.time?.replace(" ET", "");
+    if (gameTimeStr && gameTimeStr !== "N/A") {
+      try {
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+        const [time, period] = gameTimeStr.split(" ");
+        const [hrs, mins] = time.split(":").map(Number);
+        let hour = hrs;
+        if (period === "PM" && hrs !== 12) hour += 12;
+        if (period === "AM" && hrs === 12) hour = 0;
+        const gameDate = new Date(`${today}T${String(hour).padStart(2,"0")}:${String(mins).padStart(2,"0")}:00-04:00`);
+        const cutoff = new Date(gameDate.getTime() + 15 * 60 * 1000);
+        if (new Date() > cutoff) return false;
+      } catch(e) {}
+    }
+    return (
+      g.away.toLowerCase().includes(search.toLowerCase()) ||
+      g.home.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   function togglePick(gameId, betType) {
     const key = `${gameId}__${betType}`;
@@ -2189,7 +2230,7 @@ export default function App() {
     const prev = playResults[key];
     const isClear = result === null || prev === result;
     if (isClear) {
-      let delQuery = supabase.from("group_results").delete().eq("key", key).eq("date", TODAY_DATE);
+      let delQuery = supabase.from("group_results").delete().eq("key", key).eq("date", activePicksDate);
       if (activeGroup?.id) delQuery = delQuery.eq("group_id", activeGroup.id);
       await delQuery;
       // Clear result in pick_history for all users who had this pick
@@ -2199,7 +2240,7 @@ export default function App() {
       setPlayResults(next);
       recomputeRecord(next);
     } else {
-      await supabase.from("group_results").upsert({ key, result, date: TODAY_DATE, group_id: activeGroup?.id || null }, { onConflict: "key,date" });
+      await supabase.from("group_results").upsert({ key, result, date: activePicksDate, group_id: activeGroup?.id || null }, { onConflict: "key,date" });
       const next = { ...playResults, [key]: result };
       setPlayResults(next);
       recomputeRecord(next);
@@ -3140,6 +3181,39 @@ export default function App() {
                                   </div>
                                 </div>
                               ))}
+                              {/* Note + Units for MLB */}
+                              {(() => {
+                                const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
+                                  .map(bt => `${game.id}__${bt}`)
+                                  .find(k => selectedPicks[k]);
+                                if (!activeKey) return null;
+                                return (
+                                  <>
+                                    <div style={{ marginTop: 4 }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "rgba(255,255,255,0.15)" }}>(optional)</span></div>
+                                      <input
+                                        type="text"
+                                        maxLength={80}
+                                        placeholder="e.g. got +115 instead of +105"
+                                        value={pickNotes[activeKey] || ""}
+                                        onChange={e => setPickNotes(prev => ({ ...prev, [activeKey]: e.target.value }))}
+                                        style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }}
+                                      />
+                                    </div>
+                                    <div style={{ marginTop: 10 }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        {[1,2,3,4,5].map(u => {
+                                          const active = (pickUnits[activeKey] || 1) === u;
+                                          return (
+                                            <button key={u} onClick={() => setPickUnits(prev => ({ ...prev, [activeKey]: u }))} style={{ flex: 1, padding: "7px 0", background: active?"rgba(30,144,255,0.3)":"rgba(255,255,255,0.04)", border: active?"1px solid rgba(30,144,255,0.5)":"1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: active?"#bae6fd":"rgba(255,255,255,0.35)", fontSize: 12, fontWeight: active?700:400, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{u}u</button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
