@@ -6,7 +6,7 @@ const SAMPLE_GAMES = [
   { id: "g1",  away: "Pittsburgh",      home: "Stanford",        time: "TBD",      spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g2",  away: "Alcorn State",    home: "Prairie View",    time: "11:00 AM", spread: { away: "+6.5",  home: "-6.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g3",  away: "Utah",            home: "Cincinnati",      time: "12:00 PM", spread: { away: "+12.5", home: "-12.5" }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
-  { id: "g4",  away: "Syracuse",        home: "SMU",             time: "1:30 PM",  spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },a
+  { id: "g4",  away: "Syracuse",        home: "SMU",             time: "1:30 PM",  spread: { away: "+4.5",  home: "-4.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g5",  away: "Maryland",        home: "Oregon",          time: "2:00 PM",  spread: { away: "+3.5",  home: "-3.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g6",  away: "UMass Lowell",    home: "UMBC",            time: "3:00 PM",  spread: { away: "+7.5",  home: "-7.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
   { id: "g7",  away: "Missouri St",     home: "FIU",             time: "3:30 PM",  spread: { away: "+1.5",  home: "-1.5"  }, total: "N/A", ml: { away: "N/A", home: "N/A" } },
