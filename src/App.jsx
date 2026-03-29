@@ -2911,9 +2911,9 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "3px", gap: 2, border: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "2px", gap: 1, border: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
               {[["picks","Picks"],["group","Group"],["players","Players"],["futures","Futures"]].filter(([p]) => !viewerMode || p !== "picks").map(([p, label]) => (
-                <button key={p} className="nav-btn" onClick={() => { setPage(p); if(p==="futures") loadFutures(); }} style={{ padding: "7px 10px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 8, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 11, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", whiteSpace: "nowrap" }}>
+                <button key={p} className="nav-btn" onClick={() => { setPage(p); if(p==="futures") loadFutures(); }} style={{ padding: "6px 7px", background: page===p?"rgba(30,144,255,0.35)":"transparent", border: page===p?"1px solid rgba(30,144,255,0.5)":"1px solid transparent", borderRadius: 8, color: page===p?"#e0f2fe":"rgba(255,255,255,0.38)", fontSize: 10, fontWeight: page===p?600:400, cursor: "pointer", fontFamily: "Outfit, sans-serif", position: "relative", whiteSpace: "nowrap" }}>
                   {label}
                   {p==="group" && groupPlays.length>0 && <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, background: "#0ea5e9", borderRadius: "50%", boxShadow: "0 0 6px #0ea5e9" }} />}
                 </button>
@@ -2933,8 +2933,8 @@ export default function App() {
                     <span style={{ fontSize: 7, color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>▾</span>
                   </button>
                 )}
-                <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 8px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 90 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(30,144,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#bae6fd", flexShrink: 0 }}>{username[0]?.toUpperCase()}</div>
+                <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 8px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 80 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: "rgba(30,144,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#bae6fd", flexShrink: 0 }}>{username[0]?.toUpperCase()}</div>
                   <span style={{ fontSize: 11, fontWeight: 600, color: "#bae6fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{username}</span>
                   <span style={{ fontSize: 8, color: "rgba(186,230,253,0.5)", flexShrink: 0 }}>▾</span>
                 </button>
