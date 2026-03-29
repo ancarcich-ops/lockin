@@ -2973,21 +2973,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Invite code */}
-        {activeGroup && !viewerMode && (
-          <div style={{ padding: "6px 22px 0", maxWidth: 660, margin: "0 auto" }}>
-            <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"8px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:2, textTransform:"uppercase" }}>Invite Code</span>
-                <span style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,0.7)", letterSpacing:3 }}>{activeGroup.invite_code}</span>
-              </div>
-              <div style={{ display:"flex", gap:6 }}>
-                <button onClick={() => navigator.clipboard.writeText(activeGroup.invite_code)} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy Code</button>
-                <button onClick={() => navigator.clipboard.writeText(`https://lock-in-picks.com?join=${activeGroup.invite_code}`)} style={{ background:"rgba(30,144,255,0.12)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:7, padding:"5px 11px", color:"#bae6fd", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy Link</button>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         {submitters.length > 0 && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "7px 22px" }}>
