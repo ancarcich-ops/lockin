@@ -2142,24 +2142,37 @@ export default function App() {
 
   // ── Picks ─────────────────────────────────────────────────────────────────
   const filteredGames = games.filter(g => {
+    if (!g || !g.away || !g.home) return false;
     // Hide games that started more than 15 minutes ago
     const gameTimeStr = g.time?.replace(" ET", "");
-    if (gameTimeStr && gameTimeStr !== "N/A") {
+    if (gameTimeStr && gameTimeStr !== "N/A" && gameTimeStr.includes(":")) {
       try {
-        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-        const [time, period] = gameTimeStr.split(" ");
-        const [hrs, mins] = time.split(":").map(Number);
-        let hour = hrs;
-        if (period === "PM" && hrs !== 12) hour += 12;
-        if (period === "AM" && hrs === 12) hour = 0;
-        const gameDate = new Date(`${today}T${String(hour).padStart(2,"0")}:${String(mins).padStart(2,"0")}:00-04:00`);
-        const cutoff = new Date(gameDate.getTime() + 15 * 60 * 1000);
-        if (new Date() > cutoff) return false;
+        const parts = gameTimeStr.split(" ");
+        if (parts.length === 2) {
+          const [time, period] = parts;
+          const timeParts = time.split(":");
+          if (timeParts.length === 2) {
+            let hour = parseInt(timeParts[0], 10);
+            const mins = parseInt(timeParts[1], 10);
+            if (!isNaN(hour) && !isNaN(mins)) {
+              if (period === "PM" && hour !== 12) hour += 12;
+              if (period === "AM" && hour === 12) hour = 0;
+              const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+              const gameDate = new Date(`${today}T${String(hour).padStart(2,"0")}:${String(mins).padStart(2,"0")}:00`);
+              // Adjust for ET offset manually to avoid Safari ISO parsing issues
+              const etOffsetMs = 4 * 60 * 60 * 1000; // EDT = UTC-4
+              const gameDateUTC = new Date(gameDate.getTime() + etOffsetMs);
+              const cutoff = new Date(gameDateUTC.getTime() + 15 * 60 * 1000);
+              if (!isNaN(cutoff.getTime()) && new Date() > cutoff) return false;
+            }
+          }
+        }
       } catch(e) {}
     }
+    const s = (search || "").toLowerCase();
     return (
-      g.away.toLowerCase().includes(search.toLowerCase()) ||
-      g.home.toLowerCase().includes(search.toLowerCase())
+      g.away.toLowerCase().includes(s) ||
+      g.home.toLowerCase().includes(s)
     );
   });
 
