@@ -1524,6 +1524,7 @@ export default function App() {
   const [record, setRecord]                 = useState({ wins: 0, losses: 0, pushes: 0 });
   const [allTimeRecord, setAllTimeRecord]   = useState({ wins: 0, losses: 0, pushes: 0 });
   const [playResults, setPlayResults]       = useState({});
+  const [allTimeHistory, setAllTimeHistory] = useState([]);
   const [activePicksDate, setActivePicksDate] = useState(TODAY_DATE); // tracks which date's picks are shown
 
   // Groups
@@ -2849,6 +2850,7 @@ export default function App() {
           scope={recordDetailScope}
           allPicks={allPicks}
           playResults={playResults}
+          allTimeHistory={allTimeHistory}
           games={games}
           onClose={() => setShowRecordDetail(false)}
         />
@@ -3328,7 +3330,6 @@ export default function App() {
                         result: r.result,
                         count: pickCountMap[`${r.date}||${r.key}`] || 2
                       }));
-                      console.log("[LockIn] alltime gradedRows:", gradedRows.length, "history:", history.length, "sample:", JSON.stringify(history[0]));
                       setAllTimeHistory(history);
                     })(); }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
