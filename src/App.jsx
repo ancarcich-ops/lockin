@@ -2539,10 +2539,19 @@ export default function App() {
   // ── Group play helpers ────────────────────────────────────────────────────
   function getLabel(key) {
     const [gid, bt] = key.split("__");
+    // First try live games array
     const g = games.find(x => x.id === gid);
-    if (!g) return key;
-    const { label, line } = BET_TYPES[bt](g);
-    return `${label} ${line}`;
+    if (g) {
+      const { label, line } = BET_TYPES[bt](g);
+      return `${label} ${line}`;
+    }
+    // Fall back to stored label in any user's selections
+    for (const p of Object.values(allPicks)) {
+      const stored = p.selections?.[key];
+      if (stored?.label) return `${stored.label}${stored.line ? " " + stored.line : ""}`;
+    }
+    // Last resort: try to make it readable from the key
+    return key.split("__").pop()?.replace(/_/g, " ") || key;
   }
 
   function isConsensusPlay(agreers, dissenters) {
