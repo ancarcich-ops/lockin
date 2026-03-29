@@ -3328,6 +3328,7 @@ export default function App() {
                         result: r.result,
                         count: pickCountMap[`${r.date}||${r.key}`] || 2
                       }));
+                      console.log("[LockIn] alltime gradedRows:", gradedRows.length, "history:", history.length, "sample:", JSON.stringify(history[0]));
                       setAllTimeHistory(history);
                     })(); }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
