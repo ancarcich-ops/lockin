@@ -1595,7 +1595,7 @@ export default function App() {
         const uname = session.user?.user_metadata?.username || null;
         if (uname) {
           setUsername(uname);
-          loadMyGroups(session.user.id); // always load groups on session restore
+          loadMyGroups(session.user.id, uname); // always load groups on session restore
         } else {
           supabase.auth.signOut();
         }
@@ -2226,6 +2226,7 @@ export default function App() {
       selections: enriched,
       is_public: isPublic,
       date: TODAY_DATE,
+      group_id: activeGroup?.id || null,
     };
     const { error } = await supabase.from("picks").upsert(payload, { onConflict: "username,date" });
     if (!error) {
@@ -2447,7 +2448,7 @@ export default function App() {
   }
 
   // ── Groups ───────────────────────────────────────────────────────────────────
-  async function loadMyGroups(uid) {
+  async function loadMyGroups(uid, uname) {
     const { data, error } = await supabase
       .from("group_members")
       .select("role, groups(id, name, invite_code)")
@@ -2462,8 +2463,10 @@ export default function App() {
       setActiveGroup(last);
       setGroupSetupDone(true);
       // Reload data with the correct group now that we know it
-      if (last && username) {
-        loadData(username, last.id);
+      // Use uid-resolved username, not state (state may not be set yet)
+      const resolvedUsername = uname || username;
+      if (last) {
+        loadData(resolvedUsername, last.id);
         loadOddsFromCache(last.id);
       }
       return last;
