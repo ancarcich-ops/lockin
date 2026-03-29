@@ -2792,13 +2792,19 @@ export default function App() {
           <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", top:56, left:16, background:"#0d0b1e", border:"1px solid rgba(255,255,255,0.1)", borderRadius:14, padding:8, minWidth:220, boxShadow:"0 8px 32px rgba(0,0,0,0.5)" }}>
             <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:2, textTransform:"uppercase", padding:"6px 12px 4px", fontWeight:600 }}>Your Groups</div>
             {myGroups.map(g => (
-              <button key={g.id} onClick={() => switchGroup(g)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", background:activeGroup?.id===g.id?"rgba(30,144,255,0.2)":"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>
-                <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2 }}>
+              <div key={g.id}>
+                <button onClick={() => switchGroup(g)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", background:activeGroup?.id===g.id?"rgba(30,144,255,0.2)":"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>
                   <span style={{ fontSize:13, fontWeight:600, color:activeGroup?.id===g.id?"#bae6fd":"#fff" }}>{g.name}</span>
-                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:1 }}>{g.invite_code}</span>
-                </div>
-                {activeGroup?.id===g.id && <span style={{ fontSize:10, color:"#60a5fa" }}>✓</span>}
-              </button>
+                  {activeGroup?.id===g.id && <span style={{ fontSize:10, color:"#60a5fa" }}>✓</span>}
+                </button>
+                {activeGroup?.id===g.id && (
+                  <div style={{ padding:"0 12px 8px", display:"flex", gap:6, alignItems:"center" }}>
+                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)", letterSpacing:1.5 }}>{g.invite_code}</span>
+                    <button onClick={() => navigator.clipboard.writeText(g.invite_code)} style={{ background:"rgba(30,144,255,0.1)", border:"1px solid rgba(30,144,255,0.2)", borderRadius:5, padding:"2px 8px", color:"#bae6fd", fontSize:9, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy</button>
+                    <button onClick={() => navigator.clipboard.writeText(`https://lock-in-picks.com?join=${g.invite_code}`)} style={{ background:"rgba(30,144,255,0.1)", border:"1px solid rgba(30,144,255,0.2)", borderRadius:5, padding:"2px 8px", color:"#bae6fd", fontSize:9, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Copy Link</button>
+                  </div>
+                )}
+              </div>
             ))}
             <div style={{ borderTop:"1px solid rgba(255,255,255,0.07)", marginTop:4, paddingTop:4 }}>
               <button onClick={() => { setShowGroupSwitcher(false); setShowCreateGroup(true); setGroupError(""); }} style={{ width:"100%", padding:"9px 12px", background:"transparent", border:"none", borderRadius:10, cursor:"pointer", fontFamily:"Outfit, sans-serif", fontSize:12, color:"rgba(30,144,255,0.8)", textAlign:"left" }}>+ Create new group</button>
@@ -2832,7 +2838,7 @@ export default function App() {
             <div style={{ width:36, height:4, borderRadius:2, background:"rgba(255,255,255,0.15)", margin:"0 auto 22px" }} />
             <div style={{ fontSize:18, fontWeight:800, color:"#fff", marginBottom:6 }}>Join a Group</div>
             <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", marginBottom:20 }}>Enter the 6-character invite code.</div>
-            <input type="text" maxLength={6} placeholder="e.g. OGCREW" value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&joinGroup(joinCode)} style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"13px 16px", color:"#fff", fontSize:20, fontWeight:700, letterSpacing:6, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:10, boxSizing:"border-box", textTransform:"uppercase" }} />
+            <input type="text" maxLength={6} placeholder="Enter invite code" value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&joinGroup(joinCode)} style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"13px 16px", color:"#fff", fontSize:20, fontWeight:700, letterSpacing:6, fontFamily:"Outfit, sans-serif", outline:"none", marginBottom:10, boxSizing:"border-box", textTransform:"uppercase" }} />
             {groupError && <div style={{ color:"#f87171", fontSize:12, marginBottom:10 }}>{groupError}</div>}
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={() => { setShowJoinGroup(false); setGroupError(""); }} style={{ flex:1, padding:"13px 0", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"rgba(255,255,255,0.5)", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"Outfit, sans-serif" }}>Cancel</button>
