@@ -1123,25 +1123,18 @@ function RecordDetailModal({ scope, allPicks, playResults, allTimeHistory, onClo
     return tiers;
   }
 
-  // Build tiers from all-time pick_history
-  // Group by pick_key + date, count unique users per play, use stored result
+  // Build tiers from all-time group_results + pick counts
   function buildAllTimeTiers() {
     const tiers = {};
     if (!allTimeHistory || allTimeHistory.length === 0) return tiers;
-    // Group by date+pick_key to count agreers
-    const playMap = {};
     allTimeHistory.forEach(h => {
       if (!h.result) return;
-      const pk = `${h.date}__${h.pick_key}`;
-      if (!playMap[pk]) playMap[pk] = { result: h.result, count: 0 };
-      playMap[pk].count++;
-    });
-    Object.values(playMap).forEach(({ result, count }) => {
+      const count = h.count || 0;
       if (count < 2) return;
       if (!tiers[count]) tiers[count] = { wins:0, losses:0, pushes:0 };
-      if (result === "win") tiers[count].wins++;
-      else if (result === "loss") tiers[count].losses++;
-      else if (result === "push") tiers[count].pushes++;
+      if (h.result === "win") tiers[count].wins++;
+      else if (h.result === "loss") tiers[count].losses++;
+      else if (h.result === "push") tiers[count].pushes++;
     });
     return tiers;
   }
@@ -2938,10 +2931,8 @@ export default function App() {
                     <span style={{ fontSize: 7, color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>▾</span>
                   </button>
                 )}
-                <button onClick={() => { setProfileUser(null); setProfileTab("all"); loadPickHistory(username); setShowProfile(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: "50%", cursor: "pointer", fontFamily: "Outfit, sans-serif", fontSize: 13, fontWeight: 800, color: "#bae6fd" }}>
-                  {username[0]?.toUpperCase()}
-                </button>
-                <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 10px 5px 10px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 110 }}>
+                <button onClick={() => setShowAccountMenu(v => !v)} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(30,144,255,0.15)", border: "1px solid rgba(30,144,255,0.3)", borderRadius: 16, padding: "5px 8px", cursor: "pointer", fontFamily: "Outfit, sans-serif", maxWidth: 90 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(30,144,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#bae6fd", flexShrink: 0 }}>{username[0]?.toUpperCase()}</div>
                   <span style={{ fontSize: 11, fontWeight: 600, color: "#bae6fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{username}</span>
                   <span style={{ fontSize: 8, color: "rgba(186,230,253,0.5)", flexShrink: 0 }}>▾</span>
                 </button>
@@ -3305,7 +3296,32 @@ export default function App() {
                   </div>
 
                   {/* All-time */}
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); supabase.from("pick_history").select("date,pick_key,result").not("result","is",null).then(({data})=>{ if(data) setAllTimeHistory(data); }); }}>
+                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); (async () => {
+                      // Load all graded plays from group_results
+                      let q = supabase.from("group_results").select("key, result, date").in("result", ["win","loss","push"]);
+                      if (activeGroup?.id) q = q.eq("group_id", activeGroup.id);
+                      const { data: gradedRows } = await q;
+                      if (!gradedRows) return;
+                      // For each graded key, count how many picks rows have that key
+                      const pickCountMap = {};
+                      const allPicksRes = await supabase.from("picks").select("selections, date").eq("group_id", activeGroup?.id || "00000000-0000-0000-0000-000000000001");
+                      if (allPicksRes.data) {
+                        allPicksRes.data.forEach(row => {
+                          Object.keys(row.selections || {}).forEach(key => {
+                            const mapKey = `${row.date}__${key}`;
+                            pickCountMap[mapKey] = (pickCountMap[mapKey] || 0) + 1;
+                          });
+                        });
+                      }
+                      // Build allTimeHistory format: { date, pick_key, result, count }
+                      const history = gradedRows.map(r => ({
+                        date: r.date,
+                        pick_key: r.key,
+                        result: r.result,
+                        count: pickCountMap[`${r.date}__${r.key}`] || 0
+                      }));
+                      setAllTimeHistory(history);
+                    })(); }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3 }}>All Time</div>
