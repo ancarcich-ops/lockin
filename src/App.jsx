@@ -1832,13 +1832,16 @@ export default function App() {
   useEffect(() => {
     if (viewerMode) { loadData(null); return; }
     if (!session || !username) return;
-    loadData(username, activeGroup?.id || null);
+    if (!activeGroup?.id) return; // wait for group to load
+    loadData(username, activeGroup.id);
   }, [session, username, viewerMode, activeGroup]);
 
   async function loadData(activeUsername, gid) {
     const uname = activeUsername || username;
     const groupId = gid || activeGroup?.id;
     if (!uname && !viewerMode) { setLoading(false); return; }
+    // Don't load picks without a group — all picks are group-scoped
+    if (!groupId && !viewerMode) { setLoading(false); return; }
     setLoading(true);
     try {
     let picksQuery = supabase.from("picks").select("username, selections, is_public, user_id, date").eq("date", TODAY_DATE);
