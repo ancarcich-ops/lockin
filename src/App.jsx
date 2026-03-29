@@ -3301,24 +3301,32 @@ export default function App() {
                       let q = supabase.from("group_results").select("key, result, date").in("result", ["win","loss","push"]);
                       if (activeGroup?.id) q = q.eq("group_id", activeGroup.id);
                       const { data: gradedRows } = await q;
-                      if (!gradedRows) return;
-                      // For each graded key, count how many picks rows have that key
+                      if (!gradedRows || gradedRows.length === 0) { setAllTimeHistory([]); return; }
+
+                      // Load all picks for this group to count agreers per play
+                      let pq = supabase.from("picks").select("selections, date");
+                      if (activeGroup?.id) pq = pq.eq("group_id", activeGroup.id);
+                      const { data: allPicksData } = await pq;
+
+                      // Build pick count map: "date__gameId__betType" -> count
                       const pickCountMap = {};
-                      const allPicksRes = await supabase.from("picks").select("selections, date").eq("group_id", activeGroup?.id || "00000000-0000-0000-0000-000000000001");
-                      if (allPicksRes.data) {
-                        allPicksRes.data.forEach(row => {
-                          Object.keys(row.selections || {}).forEach(key => {
-                            const mapKey = `${row.date}__${key}`;
-                            pickCountMap[mapKey] = (pickCountMap[mapKey] || 0) + 1;
-                          });
+                      if (allPicksData) {
+                        allPicksData.forEach(row => {
+                          try {
+                            const sels = typeof row.selections === "string" ? JSON.parse(row.selections) : row.selections;
+                            Object.keys(sels || {}).forEach(key => {
+                              const mapKey = `${row.date}||${key}`;
+                              pickCountMap[mapKey] = (pickCountMap[mapKey] || 0) + 1;
+                            });
+                          } catch(e) {}
                         });
                       }
-                      // Build allTimeHistory format: { date, pick_key, result, count }
+
                       const history = gradedRows.map(r => ({
                         date: r.date,
                         pick_key: r.key,
                         result: r.result,
-                        count: pickCountMap[`${r.date}__${r.key}`] || 0
+                        count: pickCountMap[`${r.date}||${r.key}`] || 2
                       }));
                       setAllTimeHistory(history);
                     })(); }}>
