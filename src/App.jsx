@@ -2334,6 +2334,7 @@ export default function App() {
 
   // ── Futures ─────────────────────────────────────────────────────────────────
   async function loadFutures() {
+    if (!activeGroup?.id) return; // wait for group
     setFuturesLoading(true);
     // Load cached futures teams from group_results (newest row)
     const { data: cached } = await supabase
@@ -2468,6 +2469,7 @@ export default function App() {
       if (last) {
         loadData(resolvedUsername, last.id);
         loadOddsFromCache(last.id);
+        loadFutures();
       }
       return last;
     }
