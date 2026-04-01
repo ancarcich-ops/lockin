@@ -1725,7 +1725,7 @@ export default function App() {
     setOddsLoading(true); setOddsError(null);
     try {
       console.log("[LockIn] admin triggered odds refresh - hitting API");
-      const sports = [{ key: "basketball_ncaab", label: "ncaab" }, { key: "baseball_mlb", label: "mlb" }];
+      const sports = [{ key: "basketball_nba", label: "nba" }, { key: "basketball_ncaab", label: "ncaab" }, { key: "baseball_mlb", label: "mlb" }];
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
@@ -3155,6 +3155,79 @@ export default function App() {
                     </div>
                   );
                 })}
+                {/* NBA Section */}
+                {filteredGames.filter(g => g.sport === "nba").length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                      <span style={{ background: "linear-gradient(135deg, rgba(200,60,20,0.4), rgba(180,40,10,0.4))", border: "1px solid rgba(200,60,20,0.45)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "#fca5a5", textTransform: "uppercase" }}>NBA</span>
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{filteredGames.filter(g => g.sport === "nba").length} game{filteredGames.filter(g => g.sport === "nba").length!==1?"s":""}{search?" found":" today"}</span>
+                    </div>
+                    {filteredGames.filter(g => g.sport === "nba").map(game => {
+                      const isOpen = expandedGame === game.id;
+                      const gamePicks = Object.keys(selectedPicks).filter(k => k.startsWith(game.id));
+                      return (
+                        <div key={game.id} className={isOpen?"glass-card-open":"glass-card"} style={{ borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s, background 0.2s" }}>
+                          <div className="game-row" onClick={() => setExpandedGame(isOpen ? null : game.id)} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isOpen?"1px solid rgba(255,255,255,0.06)":"none" }}>
+                            <div>
+                              <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{game.away} <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 300 }}>@</span> {game.home}</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{game.time}</div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              {gamePicks.length > 0 && <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.35), rgba(14,165,233,0.35))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd", fontWeight: 600 }}>{gamePicks.length} pick{gamePicks.length!==1?"s":""}</span>}
+                              <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 13, display: "inline-block", transform: isOpen?"rotate(180deg)":"rotate(0deg)", transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)" }}>▾</span>
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div style={{ padding: "16px 18px 18px" }} className="expand">
+                              {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]],["Moneyline",["ml_away","ml_home"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
+                                <div key={catLabel} style={{ marginBottom: 14 }}>
+                                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>{catLabel}</div>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                    {types.map(bt => {
+                                      const v = BET_TYPES[bt](game);
+                                      const key = `${game.id}__${bt}`;
+                                      const picked = !!selectedPicks[key];
+                                      return (
+                                        <button key={bt} onClick={() => !hasSubmitted && togglePick(key, v.label)} style={{ flex: 1, minWidth: 100, padding: "10px 14px", background: picked?"linear-gradient(135deg,rgba(30,144,255,0.35),rgba(14,165,233,0.25))":"rgba(255,255,255,0.04)", border: picked?"1px solid rgba(30,144,255,0.6)":"1px solid rgba(255,255,255,0.08)", borderRadius: 10, cursor: hasSubmitted?"default":"pointer", transition: "all 0.15s", fontFamily: "Outfit, sans-serif" }}>
+                                          <div style={{ fontSize: 13, fontWeight: 700, color: picked?"#bae6fd":"#fff" }}>{v.line}</div>
+                                          <div style={{ fontSize: 10, color: picked?"rgba(186,230,253,0.6)":"rgba(255,255,255,0.3)", marginTop: 2 }}>{v.label}</div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                              {(() => {
+                                const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
+                                  .map(bt => `${game.id}__${bt}`)
+                                  .find(k => selectedPicks[k]);
+                                if (!activeKey) return null;
+                                return (
+                                  <>
+                                    <div style={{ marginTop: 4 }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "rgba(255,255,255,0.15)" }}>(optional)</span></div>
+                                      <input type="text" maxLength={80} placeholder="e.g. got -3 instead of -3.5" value={pickNotes[activeKey] || ""} onChange={e => setPickNotes(prev => ({ ...prev, [activeKey]: e.target.value }))} style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }} />
+                                    </div>
+                                    <div style={{ marginTop: 10 }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        {[1,2,3,4,5].map(u => {
+                                          const active = (pickUnits[activeKey] || 1) === u;
+                                          return <button key={u} onClick={() => setPickUnits(prev => ({ ...prev, [activeKey]: u }))} style={{ flex: 1, padding: "7px 0", background: active?"rgba(30,144,255,0.3)":"rgba(255,255,255,0.04)", border: active?"1px solid rgba(30,144,255,0.5)":"1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: active?"#bae6fd":"rgba(255,255,255,0.35)", fontSize: 12, fontWeight: active?700:400, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{u}u</button>;
+                                        })}
+                                      </div>
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* MLB Section */}
                 {filteredGames.filter(g => g.sport === "mlb").length > 0 && (
                   <div style={{ marginTop: 8 }}>
