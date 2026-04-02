@@ -1624,6 +1624,7 @@ export default function App() {
     if (!authUser.trim() || !authPass.trim()) return setAuthError("Fill in all fields.");
     if (authPass !== authPass2) return setAuthError("Passwords don't match.");
     if (authUser.trim().length < 2) return setAuthError("Username must be at least 2 characters.");
+    if (!authEmail.trim() || !authEmail.includes("@")) return setAuthError("A valid email is required to reset your password.");
     setAuthWorking(true); setAuthError("");
     // Check username taken (case-insensitive)
     const { data: existing } = await supabase.from("profiles").select("id").ilike("username", authUser.trim()).maybeSingle();
@@ -2747,7 +2748,7 @@ export default function App() {
               <input className="glass-input" type="password" value={authPass} onChange={e => { setAuthPass(e.target.value); setAuthError(""); }} placeholder="Password" onKeyDown={e => e.key==="Enter" && (authMode==="login"?handleLogin():handleSignup())} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
               {authMode === "signup" && <>
                 <input className="glass-input" type="password" value={authPass2} onChange={e => { setAuthPass2(e.target.value); setAuthError(""); }} placeholder="Confirm password" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
-                <input className="glass-input" type="email" value={authEmail} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} placeholder="Email (optional — for password recovery)" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+                <input className="glass-input" type="email" value={authEmail} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} placeholder="Email (required for password recovery)" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
               </>}
             </div>
 
