@@ -1492,6 +1492,9 @@ export default function App() {
   const [authLoading, setAuthLoading]   = useState(true);
   const [authMode, setAuthMode]         = useState("login"); // "login" | "signup"
   const [authUser, setAuthUser]         = useState("");
+  const [authEmail, setAuthEmail]       = useState("");
+  const [forgotMode, setForgotMode]     = useState(false);
+  const [forgotSent, setForgotSent]     = useState(false);
   const [authPass, setAuthPass]         = useState("");
   const [authPass2, setAuthPass2]       = useState("");
   const [authError, setAuthError]       = useState("");
@@ -1606,6 +1609,17 @@ export default function App() {
     return user?.user_metadata?.username || null;
   }
 
+  async function handleForgotPassword() {
+    if (!authEmail.trim()) return setAuthError("Enter your email address.");
+    setAuthWorking(true); setAuthError("");
+    const { error } = await supabase.auth.resetPasswordForEmail(authEmail.trim(), {
+      redirectTo: "https://lock-in-picks.com"
+    });
+    setAuthWorking(false);
+    if (error) return setAuthError("Couldn't find that email. Try again.");
+    setForgotSent(true);
+  }
+
   async function handleSignup() {
     if (!authUser.trim() || !authPass.trim()) return setAuthError("Fill in all fields.");
     if (authPass !== authPass2) return setAuthError("Passwords don't match.");
@@ -1614,9 +1628,9 @@ export default function App() {
     // Check username taken (case-insensitive)
     const { data: existing } = await supabase.from("profiles").select("id").ilike("username", authUser.trim()).maybeSingle();
     if (existing) { setAuthError("Username already taken."); setAuthWorking(false); return; }
-    const fakeEmail = `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
+    const emailToUse = authEmail.trim() || `${authUser.trim().toLowerCase().replace(/\s+/g, "_")}@lockin.app`;
     const { data, error } = await supabase.auth.signUp({
-      email: fakeEmail,
+      email: emailToUse,
       password: authPass,
       options: { data: { username: authUser.trim() } }
     });
@@ -2704,23 +2718,56 @@ export default function App() {
           ))}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input className="glass-input" value={authUser} onChange={e => { setAuthUser(e.target.value); setAuthError(""); }} placeholder="Username" onKeyDown={e => e.key==="Enter" && (authMode==="login"?handleLogin():handleSignup())} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
-          <input className="glass-input" type="password" value={authPass} onChange={e => { setAuthPass(e.target.value); setAuthError(""); }} placeholder="Password" onKeyDown={e => e.key==="Enter" && (authMode==="login"?handleLogin():handleSignup())} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
-          {authMode === "signup" && (
-            <input className="glass-input" type="password" value={authPass2} onChange={e => { setAuthPass2(e.target.value); setAuthError(""); }} placeholder="Confirm password" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
-          )}
-        </div>
+        {/* Forgot password form */}
+        {forgotMode ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {forgotSent ? (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📬</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 6 }}>Check your email</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", lineHeight: 1.6 }}>We sent a password reset link. Click it to set a new password.</div>
+                <button onClick={() => { setForgotMode(false); setForgotSent(false); setAuthEmail(""); setAuthError(""); }} style={{ marginTop: 20, background: "none", border: "none", color: "#60a5fa", fontSize: 13, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>Back to login</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>Enter the email address you signed up with.</div>
+                <input className="glass-input" type="email" value={authEmail} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} placeholder="Email address" onKeyDown={e => e.key==="Enter" && handleForgotPassword()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+                {authError && <div style={{ fontSize: 12, color: "#f87171", textAlign: "center" }}>{authError}</div>}
+                <button onClick={handleForgotPassword} disabled={authWorking} style={{ width: "100%", marginTop: 8, padding: "14px", background: authWorking?"rgba(255,255,255,0.08)":"linear-gradient(135deg, #1E90FF, #0ea5e9)", border: "none", borderRadius: 12, color: authWorking?"rgba(255,255,255,0.3)":"#fff", fontSize: 14, fontWeight: 700, cursor: authWorking?"not-allowed":"pointer", fontFamily: "Outfit, sans-serif" }}>
+                  {authWorking ? "..." : "Send Reset Link"}
+                </button>
+                <button onClick={() => { setForgotMode(false); setAuthError(""); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: "Outfit, sans-serif", marginTop: 4 }}>← Back to login</button>
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input className="glass-input" value={authUser} onChange={e => { setAuthUser(e.target.value); setAuthError(""); }} placeholder="Username" onKeyDown={e => e.key==="Enter" && (authMode==="login"?handleLogin():handleSignup())} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+              <input className="glass-input" type="password" value={authPass} onChange={e => { setAuthPass(e.target.value); setAuthError(""); }} placeholder="Password" onKeyDown={e => e.key==="Enter" && (authMode==="login"?handleLogin():handleSignup())} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+              {authMode === "signup" && <>
+                <input className="glass-input" type="password" value={authPass2} onChange={e => { setAuthPass2(e.target.value); setAuthError(""); }} placeholder="Confirm password" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+                <input className="glass-input" type="email" value={authEmail} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} placeholder="Email (optional — for password recovery)" onKeyDown={e => e.key==="Enter" && handleSignup()} style={{ borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", width: "100%" }} />
+              </>}
+            </div>
 
-        {authError && <div style={{ fontSize: 12, color: "#f87171", marginTop: 10, textAlign: "center" }}>{authError}</div>}
+            {authError && <div style={{ fontSize: 12, color: "#f87171", marginTop: 10, textAlign: "center" }}>{authError}</div>}
 
-        <button onClick={authMode==="login"?handleLogin:handleSignup} disabled={authWorking} style={{ width: "100%", marginTop: 18, padding: "14px", background: authWorking?"rgba(255,255,255,0.08)":"linear-gradient(135deg, #1E90FF, #0ea5e9)", border: "none", borderRadius: 12, color: authWorking?"rgba(255,255,255,0.3)":"#fff", fontSize: 14, fontWeight: 700, cursor: authWorking?"not-allowed":"pointer", fontFamily: "Outfit, sans-serif", boxShadow: authWorking?"none":"0 4px 20px rgba(30,144,255,0.4)" }}>
-          {authWorking ? "..." : authMode==="login" ? "Log In" : "Create Account"}
-        </button>
+            <button onClick={authMode==="login"?handleLogin:handleSignup} disabled={authWorking} style={{ width: "100%", marginTop: 18, padding: "14px", background: authWorking?"rgba(255,255,255,0.08)":"linear-gradient(135deg, #1E90FF, #0ea5e9)", border: "none", borderRadius: 12, color: authWorking?"rgba(255,255,255,0.3)":"#fff", fontSize: 14, fontWeight: 700, cursor: authWorking?"not-allowed":"pointer", fontFamily: "Outfit, sans-serif", boxShadow: authWorking?"none":"0 4px 20px rgba(30,144,255,0.4)" }}>
+              {authWorking ? "..." : authMode==="login" ? "Log In" : "Create Account"}
+            </button>
+
+            {authMode === "login" && (
+              <div style={{ textAlign: "center", marginTop: 10 }}>
+                <button onClick={() => { setForgotMode(true); setAuthError(""); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>Forgot password?</button>
+              </div>
+            )}
+          </>
+        )}
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           <div style={{ height: 1, background: "rgba(255,255,255,0.07)", marginBottom: 16 }} />
-          <button onClick={() => {  setViewerMode(true); setPage("group"); loadOddsFromCache(); loadData(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
+          <button onClick={() => { setViewerMode(true); setPage("group"); loadOddsFromCache(); loadData(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.3 }}>
             👀 Watch without an account
           </button>
         </div>
