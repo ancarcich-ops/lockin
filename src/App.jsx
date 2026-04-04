@@ -1518,6 +1518,7 @@ export default function App() {
   const [oddsLoading, setOddsLoading]       = useState(false);
   const [oddsError, setOddsError]           = useState(null);
   const [allPicks, setAllPicks]             = useState({});   // { username: { selections, is_public } }
+  const [allPicksAppWide, setAllPicksAppWide] = useState({}); // all picks across all groups for trending
   const [myPicks, setMyPicks]               = useState(null); // null = not submitted today
   const [selectedPicks, setSelectedPicks]   = useState({});
   const [isPublic, setIsPublic]             = useState(true);
@@ -1731,6 +1732,18 @@ export default function App() {
       }
     } catch (err) {
       console.error("[LockIn] cache load error:", err);
+    }
+  }
+
+  async function loadTrendingPicks() {
+    const TODAY_DATE = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const { data } = await supabase.from("picks")
+      .select("username, selections")
+      .eq("date", TODAY_DATE);
+    if (data) {
+      const built = {};
+      data.forEach(row => { built[row.username] = row.selections || {}; });
+      setAllPicksAppWide(built);
     }
   }
 
@@ -2099,6 +2112,7 @@ export default function App() {
 
     const picksSub = supabase.channel(`picks-changes-${channelSuffix}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
+        loadTrendingPicks();
         let q = supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE);
         if (gid) q = q.eq("group_id", gid);
         q.then(({ data }) => {
@@ -2479,6 +2493,7 @@ export default function App() {
         loadData(resolvedUsername, last.id);
         loadOddsFromCache(last.id);
         loadFutures();
+        loadTrendingPicks();
       }
       return last;
     }
@@ -2613,26 +2628,27 @@ export default function App() {
 
   const allPlays    = getGroupPlays();
 
-  // Trending: top 3 games by number of unique pickers across ALL users (no group filter)
+  // Trending: top 3 games by unique pickers across ALL users app-wide
   const trendingGames = useMemo(() => {
     const gamePickCounts = {};
-    const gameSideCounts = {};
-    // Use allPicks which is already loaded for the group - for cross-app we'd need a separate fetch
-    // but this gives group-level trending which is most relevant
-    Object.values(allPicks).forEach(({ selections }) => {
+    const gameSideCounts = {}; // gameId -> { betKey -> count }
+    Object.values(allPicksAppWide).forEach(selections => {
       const countedGames = new Set();
       Object.entries(selections || {}).forEach(([key, val]) => {
         const parts = key.split("__");
         if (parts.length < 2) return;
         const gid = parts[0];
+        const betType = parts[1]; // use betType as canonical key to avoid label dupes
         if (!countedGames.has(gid)) {
           gamePickCounts[gid] = (gamePickCounts[gid] || 0) + 1;
           countedGames.add(gid);
         }
-        // Count per side
+        // Use betType as the grouping key, store best label we find
         if (!gameSideCounts[gid]) gameSideCounts[gid] = {};
-        const sideLabel = val?.label && val?.line ? `${val.label} ${val.line}` : val?.label || key;
-        gameSideCounts[gid][sideLabel] = (gameSideCounts[gid][sideLabel] || 0) + 1;
+        if (!gameSideCounts[gid][betType]) {
+          gameSideCounts[gid][betType] = { count: 0, label: val?.label && val?.line ? `${val.label} ${val.line}` : val?.label || betType };
+        }
+        gameSideCounts[gid][betType].count += 1;
       });
     });
     return Object.entries(gamePickCounts)
@@ -2641,14 +2657,14 @@ export default function App() {
       .map(([gameId, count]) => {
         const game = games.find(g => g.id === gameId);
         if (!game) return null;
-        const sides = Object.entries(gameSideCounts[gameId] || {})
-          .sort((a, b) => b[1] - a[1])
+        const sides = Object.values(gameSideCounts[gameId] || {})
+          .sort((a, b) => b.count - a.count)
           .slice(0, 4)
-          .map(([label, cnt]) => ({ label, count: cnt }));
+          .map(({ label, count: cnt }) => ({ label, count: cnt }));
         return { game, pickCount: count, sides };
       })
       .filter(Boolean);
-  }, [allPicks, games]);
+  }, [allPicksAppWide, games]);
   const groupPlays  = allPlays.filter(([,,,c]) => c);
   const otherPlays  = allPlays.filter(([,,,c]) => !c);
   const submitters  = Object.keys(allPicks);
