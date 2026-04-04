@@ -2612,6 +2612,43 @@ export default function App() {
   }
 
   const allPlays    = getGroupPlays();
+
+  // Trending: top 3 games by number of unique pickers across ALL users (no group filter)
+  const trendingGames = useMemo(() => {
+    const gamePickCounts = {};
+    const gameSideCounts = {};
+    // Use allPicks which is already loaded for the group - for cross-app we'd need a separate fetch
+    // but this gives group-level trending which is most relevant
+    Object.values(allPicks).forEach(({ selections }) => {
+      const countedGames = new Set();
+      Object.entries(selections || {}).forEach(([key, val]) => {
+        const parts = key.split("__");
+        if (parts.length < 2) return;
+        const gid = parts[0];
+        if (!countedGames.has(gid)) {
+          gamePickCounts[gid] = (gamePickCounts[gid] || 0) + 1;
+          countedGames.add(gid);
+        }
+        // Count per side
+        if (!gameSideCounts[gid]) gameSideCounts[gid] = {};
+        const sideLabel = val?.label && val?.line ? `${val.label} ${val.line}` : val?.label || key;
+        gameSideCounts[gid][sideLabel] = (gameSideCounts[gid][sideLabel] || 0) + 1;
+      });
+    });
+    return Object.entries(gamePickCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([gameId, count]) => {
+        const game = games.find(g => g.id === gameId);
+        if (!game) return null;
+        const sides = Object.entries(gameSideCounts[gameId] || {})
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(([label, cnt]) => ({ label, count: cnt }));
+        return { game, pickCount: count, sides };
+      })
+      .filter(Boolean);
+  }, [allPicks, games]);
   const groupPlays  = allPlays.filter(([,,,c]) => c);
   const otherPlays  = allPlays.filter(([,,,c]) => !c);
   const submitters  = Object.keys(allPicks);
@@ -3119,6 +3156,49 @@ export default function App() {
                   <input className="glass-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search teams..." style={{ width: "100%", borderRadius: 12, padding: "11px 14px 11px 40px", color: "#fff", fontSize: 13, fontFamily: "Outfit, sans-serif", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }} />
                   {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>}
                 </div>}
+
+                {/* Trending Section */}
+                {!search && trendingGames.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <span style={{ fontSize: 12 }}>🔥</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "rgba(251,146,60,0.9)", textTransform: "uppercase" }}>Trending Today</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginLeft: 4 }}>most picked in your group</span>
+                    </div>
+                    {trendingGames.map(({ game, pickCount, sides }) => (
+                      <div key={game.id} onClick={() => setExpandedGame(expandedGame === game.id ? null : game.id)}
+                        style={{ background: "linear-gradient(135deg, rgba(251,146,60,0.08), rgba(255,255,255,0.02))", border: "1px solid rgba(251,146,60,0.2)", borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: sides.length ? 10 : 0 }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{game.away} @ {game.home}</div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{(game.sport || "ncaab").toUpperCase()} · {game.time}</div>
+                          </div>
+                          <div style={{ textAlign: "center", minWidth: 40 }}>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: pickCount >= 5 ? "#facc15" : pickCount >= 3 ? "#fb923c" : "#7dd3fc", lineHeight: 1 }}>{pickCount}</div>
+                            <div style={{ fontSize: 8, color: "rgba(255,255,255,0.25)", letterSpacing: 1, textTransform: "uppercase" }}>picking</div>
+                          </div>
+                        </div>
+                        {sides.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            {sides.map(({ label, count }) => {
+                              const maxCount = sides[0].count;
+                              const pct = (count / maxCount) * 100;
+                              return (
+                                <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", width: 100, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+                                  <div style={{ flex: 1, height: 5, background: "rgba(255,255,255,0.07)", borderRadius: 3, overflow: "hidden" }}>
+                                    <div style={{ width: `${pct}%`, height: "100%", background: "rgba(251,146,60,0.5)", borderRadius: 3, transition: "width 0.3s" }} />
+                                  </div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.4)", minWidth: 16, textAlign: "right" }}>{count}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* NCAAB Section */}
                 {filteredGames.filter(g => !g.sport || g.sport === "ncaab").length > 0 && (
