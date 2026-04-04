@@ -3179,7 +3179,7 @@ export default function App() {
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
                       <span style={{ fontSize: 12 }}>🔥</span>
                       <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: "rgba(251,146,60,0.9)", textTransform: "uppercase" }}>Trending Today</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginLeft: 4 }}>most picked in your group</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginLeft: 4 }}>most picked games today</span>
                     </div>
                     {trendingGames.map(({ game, pickCount, sides }) => (
                       <div key={game.id} onClick={() => setExpandedGame(expandedGame === game.id ? null : game.id)}
