@@ -1839,7 +1839,7 @@ export default function App() {
         setGames(mergedGames);
         await supabase.from("group_results").upsert(
           { key: `__odds_cache__${TODAY_DATE}`, result: JSON.stringify(mergedGames), date: TODAY_DATE, group_id: activeGroup?.id || null },
-          { onConflict: "key,date" }
+          { onConflict: "key,date,group_id" }
         );
       }
     } catch (err) {
