@@ -1780,7 +1780,7 @@ export default function App() {
           const totals_h1 = g.bookmakers?.[0]?.markets?.find(m => m.key === "totals_h1");
           const awayTeam = g.away_team;
           const homeTeam = g.home_team;
-          const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
+          const time = new Date(g.commence_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
           const awaySpread = spreads?.outcomes?.find(o => o.name === awayTeam);
           const homeSpread = spreads?.outcomes?.find(o => o.name === homeTeam);
           const over = totals?.outcomes?.find(o => o.name === "Over");
@@ -1794,6 +1794,7 @@ export default function App() {
             away: awayTeam,
             home: homeTeam,
             time: `${time} ET`,
+            commenceTime: g.commence_time,
             spread: {
               away: awaySpread ? (awaySpread.point > 0 ? `+${awaySpread.point}` : `${awaySpread.point}`) : "N/A",
               home: homeSpread ? (homeSpread.point > 0 ? `+${homeSpread.point}` : `${homeSpread.point}`) : "N/A",
