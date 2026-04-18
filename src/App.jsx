@@ -1759,6 +1759,7 @@ export default function App() {
         { key: "basketball_nba", label: "NBA" },
         { key: "baseball_mlb", label: "MLB" },
         { key: "icehockey_nhl", label: "NHL" },
+        { key: "mma_mixed_martial_arts", label: "UFC" },
       ];
       const allGames = [];
       for (const sport of sports) {
