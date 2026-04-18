@@ -1930,13 +1930,17 @@ export default function App() {
       checkForNewLosses(built, games);
     }
 
-    // Load all-time record - only rows with graded results
-    let allTimeQuery2 = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
-    if (groupId) allTimeQuery2 = allTimeQuery2.eq("group_id", groupId);
-    const { data: allResultsRows } = await allTimeQuery2;
-    if (allResultsRows) {
+    // Load all-time record — fetch all results and group-specific, use higher count to include legacy
+    const { data: allResultsAll } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    let groupResultsAll = [];
+    if (groupId) {
+      const { data } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]).eq("group_id", groupId);
+      groupResultsAll = data || [];
+    }
+    const resultsToUse = (allResultsAll || []).length > groupResultsAll.length ? (allResultsAll || []) : groupResultsAll;
+    if (resultsToUse.length > 0) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
-      allResultsRows.forEach(row => {
+      resultsToUse.forEach(row => {
         if (row.result === "win") atRec.wins++;
         else if (row.result === "loss") atRec.losses++;
         else if (row.result === "push") atRec.pushes++;
@@ -2339,13 +2343,17 @@ export default function App() {
         }
       }
     }
-    // Refresh all-time record
-    let atQuery = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
-    if (activeGroup?.id) atQuery = atQuery.eq("group_id", activeGroup.id);
-    const { data: allResultsRows } = await atQuery;
-    if (allResultsRows) {
+    // Refresh all-time record — include legacy results without group_id
+    const { data: atAll } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    let atGroup = [];
+    if (activeGroup?.id) {
+      const { data } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]).eq("group_id", activeGroup.id);
+      atGroup = data || [];
+    }
+    const atRows = (atAll || []).length > atGroup.length ? (atAll || []) : atGroup;
+    if (atRows.length > 0) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
-      allResultsRows.forEach(row => {
+      atRows.forEach(row => {
         if (row.result === "win") atRec.wins++;
         else if (row.result === "loss") atRec.losses++;
         else if (row.result === "push") atRec.pushes++;
