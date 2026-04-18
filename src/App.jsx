@@ -1753,31 +1753,13 @@ export default function App() {
     setOddsLoading(true); setOddsError(null);
     try {
       console.log("[LockIn] admin triggered odds refresh - hitting API");
-      // Fetch active sports from the API, filtered to supported US sports
-      const supportedSports = [
+      // Only fetch sports currently in season — saves API credits
+      // Update this list seasonally (add/remove as seasons start/end)
+      const sports = [
         { key: "basketball_nba", label: "NBA" },
-        { key: "basketball_wnba", label: "WNBA" },
-        { key: "basketball_ncaab", label: "NCAAB" },
         { key: "baseball_mlb", label: "MLB" },
-        { key: "americanfootball_nfl", label: "NFL" },
-        { key: "americanfootball_ncaaf", label: "NCAAF" },
         { key: "icehockey_nhl", label: "NHL" },
-        { key: "soccer_usa_mls", label: "MLS" },
-        { key: "mma_mixed_martial_arts", label: "MMA" },
       ];
-      let sports = supportedSports;
-      try {
-        const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}`);
-        if (sportsRes.ok) {
-          const allSports = await sportsRes.json();
-          const activeKeys = new Set(allSports.filter(s => s.active).map(s => s.key));
-          const filtered = supportedSports.filter(s => activeKeys.has(s.key));
-          if (filtered.length > 0) sports = filtered;
-          console.log("[LockIn] Active sports:", sports.map(s => s.label));
-        }
-      } catch (e) {
-        console.log("[LockIn] Sports list fetch failed, using all supported:", e);
-      }
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
