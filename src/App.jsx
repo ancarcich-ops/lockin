@@ -1754,12 +1754,12 @@ export default function App() {
     try {
       console.log("[LockIn] admin triggered odds refresh - hitting API");
       // Only fetch sports currently in season — saves API credits
-      // Update this list seasonally (add/remove as seasons start/end)
+      // Labels must be lowercase to match the rendering sections below
       const sports = [
-        { key: "basketball_nba", label: "NBA" },
-        { key: "baseball_mlb", label: "MLB" },
-        { key: "icehockey_nhl", label: "NHL" },
-        { key: "mma_mixed_martial_arts", label: "UFC" },
+        { key: "basketball_nba", label: "nba" },
+        { key: "baseball_mlb", label: "mlb" },
+        { key: "icehockey_nhl", label: "nhl" },
+        { key: "mma_mixed_martial_arts", label: "ufc" },
       ];
       const allGames = [];
       for (const sport of sports) {
@@ -3469,6 +3469,96 @@ export default function App() {
                     })}
                   </div>
                 )}
+
+                {/* Other sports (NHL, UFC, etc.) */}
+                {(() => {
+                  const knownSports = ["ncaab", "nba", "mlb"];
+                  const sportStyles = {
+                    nhl: { bg: "rgba(20,40,120,0.4)", border: "rgba(30,60,180,0.45)", color: "#93c5fd", label: "NHL" },
+                    ufc: { bg: "rgba(160,20,20,0.4)", border: "rgba(200,30,30,0.45)", color: "#fca5a5", label: "UFC" },
+                    wnba: { bg: "rgba(200,100,20,0.4)", border: "rgba(220,120,30,0.45)", color: "#fdba74", label: "WNBA" },
+                    nfl: { bg: "rgba(40,80,30,0.4)", border: "rgba(50,100,40,0.45)", color: "#86efac", label: "NFL" },
+                    ncaaf: { bg: "rgba(120,60,20,0.4)", border: "rgba(150,80,30,0.45)", color: "#fdba74", label: "NCAAF" },
+                    mls: { bg: "rgba(20,100,80,0.4)", border: "rgba(30,130,100,0.45)", color: "#6ee7b7", label: "MLS" },
+                  };
+                  const otherSports = [...new Set(filteredGames.map(g => g.sport))].filter(s => s && !knownSports.includes(s));
+                  return otherSports.map(sport => {
+                    const style = sportStyles[sport] || { bg: "rgba(100,60,180,0.4)", border: "rgba(120,80,200,0.45)", color: "#c4b5fd", label: sport.toUpperCase() };
+                    const sportGames = filteredGames.filter(g => g.sport === sport);
+                    if (sportGames.length === 0) return null;
+                    return (
+                      <div key={sport} style={{ marginTop: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                          <span style={{ background: `linear-gradient(135deg, ${style.bg}, ${style.bg})`, border: `1px solid ${style.border}`, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: style.color, textTransform: "uppercase" }}>{style.label}</span>
+                          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{sportGames.length} game{sportGames.length!==1?"s":""}{search?" found":" today"}</span>
+                        </div>
+                        {sportGames.map(game => {
+                          const isOpen = expandedGame === game.id;
+                          const gamePicks = Object.keys(selectedPicks).filter(k => k.startsWith(game.id));
+                          return (
+                            <div key={game.id} className={isOpen?"glass-card-open":"glass-card"} style={{ borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s, background 0.2s" }}>
+                              <div className="game-row" onClick={() => setExpandedGame(isOpen ? null : game.id)} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isOpen?"1px solid rgba(255,255,255,0.06)":"none" }}>
+                                <div>
+                                  <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{game.away} <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 300 }}>@</span> {game.home}</div>
+                                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>{game.time}</div>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  {gamePicks.length > 0 && <span style={{ background: "linear-gradient(135deg, rgba(30,144,255,0.35), rgba(14,165,233,0.35))", border: "1px solid rgba(30,144,255,0.4)", borderRadius: 20, padding: "3px 11px", fontSize: 11, color: "#bae6fd", fontWeight: 600 }}>{gamePicks.length} pick{gamePicks.length!==1?"s":""}</span>}
+                                  <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 13, display: "inline-block", transform: isOpen?"rotate(180deg)":"rotate(0deg)", transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)" }}>▾</span>
+                                </div>
+                              </div>
+                              {isOpen && (
+                                <div style={{ padding: "16px 18px 18px" }} className="expand">
+                                  {[["Spread",["spread_away","spread_home"]],["Total",["over","under"]],["Moneyline",["ml_away","ml_home"]]].filter(([, types]) => types.every(bt => { const v = BET_TYPES[bt](game); return v.line && v.line !== "N/A"; })).map(([catLabel, types]) => (
+                                    <div key={catLabel} style={{ marginBottom: 14 }}>
+                                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>{catLabel}</div>
+                                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                        {types.map(bt => {
+                                          const v = BET_TYPES[bt](game);
+                                          const key = `${game.id}__${bt}`;
+                                          const picked = !!selectedPicks[key];
+                                          return (
+                                            <button key={bt} onClick={() => !hasSubmitted && togglePick(key, v.label)} style={{ flex: 1, minWidth: 100, padding: "10px 14px", background: picked?"linear-gradient(135deg,rgba(30,144,255,0.35),rgba(14,165,233,0.25))":"rgba(255,255,255,0.04)", border: picked?"1px solid rgba(30,144,255,0.6)":"1px solid rgba(255,255,255,0.08)", borderRadius: 10, cursor: hasSubmitted?"default":"pointer", transition: "all 0.15s", fontFamily: "Outfit, sans-serif" }}>
+                                              <div style={{ fontSize: 13, fontWeight: 700, color: picked?"#bae6fd":"#fff" }}>{v.line}</div>
+                                              <div style={{ fontSize: 10, color: picked?"rgba(186,230,253,0.6)":"rgba(255,255,255,0.3)", marginTop: 2 }}>{v.label}</div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {(() => {
+                                    const activeKey = ["spread_away","spread_home","over","under","ml_away","ml_home"]
+                                      .map(bt => `${game.id}__${bt}`)
+                                      .find(k => selectedPicks[k]);
+                                    if (!activeKey) return null;
+                                    return (
+                                      <>
+                                        <div style={{ marginTop: 4 }}>
+                                          <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Note <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "rgba(255,255,255,0.15)" }}>(optional)</span></div>
+                                          <input type="text" maxLength={80} placeholder="e.g. got better line" value={pickNotes[activeKey] || ""} onChange={e => setPickNotes(prev => ({ ...prev, [activeKey]: e.target.value }))} style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "9px 12px", color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Outfit, sans-serif", outline: "none", boxSizing: "border-box" }} />
+                                        </div>
+                                        <div style={{ marginTop: 10 }}>
+                                          <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Units</div>
+                                          <div style={{ display: "flex", gap: 6 }}>
+                                            {[1,2,3,4,5].map(u => {
+                                              const active = (pickUnits[activeKey] || 1) === u;
+                                              return (<button key={u} onClick={() => setPickUnits(prev => ({ ...prev, [activeKey]: u }))} style={{ flex: 1, padding: "7px 0", background: active?"rgba(30,144,255,0.3)":"rgba(255,255,255,0.04)", border: active?"1px solid rgba(30,144,255,0.5)":"1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: active?"#bae6fd":"rgba(255,255,255,0.35)", fontSize: 12, fontWeight: active?700:400, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{u}u</button>);
+                                            })}
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })()}
 
                 <div style={{ height: 16 }} />
                 }
