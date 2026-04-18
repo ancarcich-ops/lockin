@@ -1764,7 +1764,7 @@ export default function App() {
       const allGames = [];
       for (const sport of sports) {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h,spreads_h1,totals_h1&oddsFormat=american&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -2402,58 +2402,55 @@ export default function App() {
     if (!apiKey) return;
     setFuturesOddsLoading(true);
     try {
-      // Step 1: Discover which NCAAB futures sport keys are currently active
-      const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}&all=true`);
-      let sportKey = null;
-      if (sportsRes.ok) {
-        const sportsData = await sportsRes.json();
-        // Look for NCAAB winner/outright sport keys
-        const candidates = sportsData.filter(s =>
-          s.key.includes("ncaab") && (s.has_outrights || s.key.includes("winner") || s.key.includes("champion"))
-        );
-        console.log("[LockIn] NCAAB futures candidates:", candidates.map(s => s.key + " active=" + s.active));
-        const active = candidates.find(s => s.active);
-        if (active) sportKey = active.key;
-      }
+      // Fetch championship/winner futures for major sports
+      const futuresSports = [
+        { key: "basketball_nba_championship_winner", label: "NBA Champion" },
+        { key: "baseball_mlb_world_series_winner", label: "MLB World Series" },
+        { key: "icehockey_nhl_championship_winner", label: "NHL Stanley Cup" },
+        { key: "americanfootball_nfl_super_bowl_winner", label: "NFL Super Bowl" },
+        { key: "soccer_usa_mls_championship_winner", label: "MLS Cup" },
+      ];
 
-      // Step 2: Fetch odds from the discovered sport key
-      let teams = [];
-      const toTry = sportKey ? [sportKey] : ["basketball_ncaab_championship_winner"];
-      for (const key of toTry) {
-        const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${key}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american`
-        );
-        console.log(`[LockIn] futures ${key} status:`, res.status);
-        if (!res.ok) continue;
-        const data = await res.json();
-        console.log(`[LockIn] futures events returned:`, data.length);
-        const teamsMap = {};
-        data.forEach(event => {
-          const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
-          outrights?.outcomes?.forEach(o => {
-            if (!teamsMap[o.name]) {
-              const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
-              teamsMap[o.name] = { team: o.name, odds: price };
-            }
+      let allTeams = [];
+      for (const sport of futuresSports) {
+        try {
+          const res = await fetch(
+            `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american`
+          );
+          console.log(`[LockIn] futures ${sport.key} status:`, res.status);
+          if (!res.ok) continue;
+          const data = await res.json();
+          const teamsMap = {};
+          data.forEach(event => {
+            const outrights = event.bookmakers?.[0]?.markets?.find(m => m.key === "outrights");
+            outrights?.outcomes?.forEach(o => {
+              if (!teamsMap[o.name]) {
+                const price = o.price > 0 ? `+${o.price}` : `${o.price}`;
+                teamsMap[o.name] = { team: o.name, odds: price, sport: sport.label };
+              }
+            });
           });
-        });
-        teams = Object.values(teamsMap).sort((a, b) => {
-          const aNum = parseInt(a.odds.replace('+',''));
-          const bNum = parseInt(b.odds.replace('+',''));
-          return aNum - bNum;
-        });
-        if (teams.length > 0) break;
+          const sportTeams = Object.values(teamsMap).sort((a, b) => {
+            const aNum = parseInt(a.odds.replace('+',''));
+            const bNum = parseInt(b.odds.replace('+',''));
+            return aNum - bNum;
+          });
+          allTeams = allTeams.concat(sportTeams);
+          console.log(`[LockIn] futures ${sport.label}: ${sportTeams.length} teams`);
+        } catch (e) {
+          console.log(`[LockIn] futures ${sport.key} skipped:`, e);
+        }
       }
 
-      console.log(`[LockIn] futures teams found: ${teams.length}`);
-      if (teams.length > 0) {
-        setFuturesTeams(teams);
+      console.log(`[LockIn] total futures teams found: ${allTeams.length}`);
+      if (allTeams.length > 0) {
+        setFuturesTeams(allTeams);
         await supabase.from("group_results").delete().eq("key", "__futures_cache__");
         await supabase.from("group_results").insert(
-          { key: "__futures_cache__", result: JSON.stringify(teams), date: TODAY_DATE }
+          { key: "__futures_cache__", result: JSON.stringify(allTeams), date: TODAY_DATE }
         );
       } else {
-        console.warn("[LockIn] No futures teams returned — API may not have outrights for this sport/plan");
+        console.warn("[LockIn] No futures teams returned");
       }
     } catch(e) { console.error("Futures fetch error:", e); }
     setFuturesOddsLoading(false);
@@ -3834,7 +3831,7 @@ export default function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                 <div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>Futures</div>
-                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>NCAA Tournament winner picks</div>
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>Championship and title winner picks</div>
                 </div>
                 {isAdmin && (
                   <button onClick={fetchFuturesOdds} disabled={futuresOddsLoading} style={{ background: "rgba(250,204,21,0.15)", border: "1px solid rgba(250,204,21,0.4)", borderRadius: 10, padding: "8px 14px", color: "#facc15", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "Outfit, sans-serif", letterSpacing: 0.5, opacity: futuresOddsLoading ? 0.5 : 1 }}>
