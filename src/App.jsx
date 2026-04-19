@@ -1875,7 +1875,7 @@ export default function App() {
     setLoading(true);
     try {
     let picksQuery = supabase.from("picks").select("username, selections, is_public, user_id, date").eq("date", TODAY_DATE);
-    if (groupId) picksQuery = picksQuery.eq("group_id", groupId);
+    if (groupId) picksQuery = picksQuery.or(`group_id.eq.${groupId},group_id.is.null`);
     let { data: picksRows } = await picksQuery;
     // If no picks today, check yesterday for ungraded plays
     let picksDate = TODAY_DATE;
