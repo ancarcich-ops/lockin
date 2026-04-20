@@ -1885,12 +1885,12 @@ export default function App() {
       yesterday.setDate(yesterday.getDate() - 1);
       const yDate = yesterday.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
       let yQuery = supabase.from("picks").select("username, selections, is_public, user_id, date").eq("date", yDate);
-      if (groupId) yQuery = yQuery.eq("group_id", groupId);
+      if (groupId) yQuery = yQuery.or(`group_id.eq.${groupId},group_id.is.null`);
       const { data: yRows } = await yQuery;
       if (yRows && yRows.length > 0) {
         // Check if there are any ungraded results from yesterday
         let yResultsQ = supabase.from("group_results").select("key, result").eq("date", yDate).not("result", "in", '("win","loss","push")');
-        if (groupId) yResultsQ = yResultsQ.eq("group_id", groupId);
+        if (groupId) yResultsQ = yResultsQ.or(`group_id.eq.${groupId},group_id.is.null`);
         const { data: yUngraded } = await yResultsQ;
         // Also check if any picks exist that have no result at all (pending)
         if (yUngraded && yUngraded.length > 0) {
@@ -2126,7 +2126,7 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
         loadTrendingPicks();
         let q = supabase.from("picks").select("username, selections, is_public, user_id").eq("date", TODAY_DATE);
-        if (gid) q = q.eq("group_id", gid);
+        if (gid) q = q.or(`group_id.eq.${gid},group_id.is.null`);
         q.then(({ data }) => {
           if (data) {
             const built = {};
@@ -2388,7 +2388,7 @@ export default function App() {
     }
     // Load all futures picks
     let fpQuery = supabase.from("futures_picks").select("username, team, odds, note, result, user_id").order("created_at", { ascending: true });
-    if (activeGroup?.id) fpQuery = fpQuery.eq("group_id", activeGroup.id);
+    if (activeGroup?.id) fpQuery = fpQuery.or(`group_id.eq.${activeGroup.id},group_id.is.null`);
     const { data: picks } = await fpQuery;
     if (picks) {
       setFuturesPicks(picks);
@@ -3621,13 +3621,13 @@ export default function App() {
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 14, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setRecordDetailScope("alltime"); setShowRecordDetail(true); (async () => {
                       // Load all graded plays from group_results
                       let q = supabase.from("group_results").select("key, result, date").in("result", ["win","loss","push"]);
-                      if (activeGroup?.id) q = q.eq("group_id", activeGroup.id);
+                      if (activeGroup?.id) q = q.or(`group_id.eq.${activeGroup.id},group_id.is.null`);
                       const { data: gradedRows } = await q;
                       if (!gradedRows || gradedRows.length === 0) { setAllTimeHistory([]); return; }
 
-                      // Load all picks for this group to count agreers per play
+                      // Load all picks to count agreers per play
                       let pq = supabase.from("picks").select("selections, date");
-                      if (activeGroup?.id) pq = pq.eq("group_id", activeGroup.id);
+                      if (activeGroup?.id) pq = pq.or(`group_id.eq.${activeGroup.id},group_id.is.null`);
                       const { data: allPicksData } = await pq;
 
                       // Build pick count map: "date__gameId__betType" -> count
