@@ -1931,15 +1931,11 @@ export default function App() {
       checkForNewLosses(built, games);
     }
 
-    // Load all-time record — fetch all results and group-specific, use higher count to include legacy
-    const { data: allResultsAll } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
-    let groupResultsAll = [];
-    if (groupId) {
-      const { data } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]).eq("group_id", groupId);
-      groupResultsAll = data || [];
-    }
-    const resultsToUse = (allResultsAll || []).length > groupResultsAll.length ? (allResultsAll || []) : groupResultsAll;
-    if (resultsToUse.length > 0) {
+    // Load all-time record — include group-specific + null group_id (legacy)
+    let atQuery = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    if (groupId) atQuery = atQuery.or(`group_id.eq.${groupId},group_id.is.null`);
+    const { data: resultsToUse } = await atQuery;
+    if (resultsToUse && resultsToUse.length > 0) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       resultsToUse.forEach(row => {
         if (row.result === "win") atRec.wins++;
@@ -2344,15 +2340,11 @@ export default function App() {
         }
       }
     }
-    // Refresh all-time record — include legacy results without group_id
-    const { data: atAll } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
-    let atGroup = [];
-    if (activeGroup?.id) {
-      const { data } = await supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]).eq("group_id", activeGroup.id);
-      atGroup = data || [];
-    }
-    const atRows = (atAll || []).length > atGroup.length ? (atAll || []) : atGroup;
-    if (atRows.length > 0) {
+    // Refresh all-time record — include group-specific + null group_id
+    let atRefreshQ = supabase.from("group_results").select("result").in("result", ["win", "loss", "push"]);
+    if (activeGroup?.id) atRefreshQ = atRefreshQ.or(`group_id.eq.${activeGroup.id},group_id.is.null`);
+    const { data: atRows } = await atRefreshQ;
+    if (atRows && atRows.length > 0) {
       const atRec = { wins: 0, losses: 0, pushes: 0 };
       atRows.forEach(row => {
         if (row.result === "win") atRec.wins++;
