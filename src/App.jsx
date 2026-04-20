@@ -1919,7 +1919,7 @@ export default function App() {
 
     // Load results for today
     let resultsQuery = supabase.from("group_results").select("key, result").eq("date", picksDate);
-    if (groupId) resultsQuery = resultsQuery.eq("group_id", groupId);
+    if (groupId) resultsQuery = resultsQuery.or(`group_id.eq.${groupId},group_id.is.null`);
     const { data: resultsRows } = await resultsQuery;
 
     if (resultsRows) {
@@ -2141,7 +2141,7 @@ export default function App() {
     const resultsSub = supabase.channel(`results-changes-${channelSuffix}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "group_results" }, () => {
         let q = supabase.from("group_results").select("key, result").eq("date", TODAY_DATE);
-        if (gid) q = q.eq("group_id", gid);
+        if (gid) q = q.or(`group_id.eq.${gid},group_id.is.null`);
         q.then(({ data }) => {
           if (data) {
             const built = {};
