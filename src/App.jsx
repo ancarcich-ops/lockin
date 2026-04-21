@@ -1763,10 +1763,18 @@ export default function App() {
       ];
       const allGames = [];
       for (const sport of sports) {
+        // H1 markets only exist for basketball and football
+        const supportsH1 = sport.key.startsWith("basketball_") || sport.key.startsWith("americanfootball_");
+        const markets = supportsH1 ? "spreads,totals,h2h,spreads_h1,totals_h1" : "spreads,totals,h2h";
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=spreads,totals,h2h,spreads_h1,totals_h1&oddsFormat=american&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${apiKey}&regions=us&markets=${markets}&oddsFormat=american&dateFormat=iso`
         );
-        if (!res.ok) continue;
+        console.log(`[LockIn] fetchOdds ${sport.key} status:`, res.status);
+        if (!res.ok) {
+          const body = await res.text();
+          console.log(`[LockIn] fetchOdds ${sport.key} error body:`, body.slice(0, 200));
+          continue;
+        }
         const data = await res.json();
         const todayGames = data.filter(g => {
           const etDate = new Date(g.commence_time).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
